@@ -1,0 +1,31 @@
+# --- release staging (build\make-dist.ps1) -------------------------------------
+dist/
+
+# --- compiler / IDE output -----------------------------------------------------
+bin/
+obj/
+*.rsp
+*.pdb
+*.mdb
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+
+# --- runtime files, in case they end up next to the sources --------------------
+# (the repository normally lives in <game>\CozyMarblesVR; the game, BepInEx and its
+#  config/logs sit one level up and are not part of the repository)
+*.log
+cozyvr-out/
+cozyvr-cmd.txt
+*.cfg
+
+# --- OS clutter ----------------------------------------------------------------
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# lib/ is tracked on purpose: it holds the XR assemblies compiled from Unity's packages
+# (build\build-xr-deps.ps1) so the mod builds without re-downloading and compiling them.
