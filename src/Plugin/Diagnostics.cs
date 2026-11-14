@@ -228,7 +228,16 @@ namespace CozyMarblesVR
             sb.AppendLine($"shim: active={VRShim.Active} mouse={VRShim.MousePosition} hasRay={VRShim.HasPointerRay} ray={VRShim.PointerRay.origin}->{VRShim.PointerRay.direction} eye={VRShim.EyePosition} origin={VRShim.ScreenOrigin} n={VRShim.ScreenNormal} size={VRShim.ScreenWidth}x{VRShim.ScreenHeight}");
             sb.AppendLine(_manager.DebugState());
             var es = EventSystem.current;
-            if (es != null) sb.AppendLine($"eventsystem: overUI={es.IsPointerOverGameObject()} selected={(es.currentSelectedGameObject ? es.currentSelectedGameObject.name : "-")}");
+            if (es != null)
+            {
+                sb.AppendLine($"eventsystem: overUI={es.IsPointerOverGameObject()} selected={(es.currentSelectedGameObject ? es.currentSelectedGameObject.name : "-")}");
+                var ped = new PointerEventData(es) { position = (Vector2)VRShim.MousePosition };
+                var hits = new List<RaycastResult>();
+                es.RaycastAll(ped, hits);
+                var names = new List<string>();
+                for (int i = 0; i < hits.Count && i < 6; i++) names.Add($"{hits[i].gameObject.name}@{hits[i].module.GetType().Name}/{hits[i].sortingOrder}");
+                sb.AppendLine($"raycast at {ped.position}: " + string.Join(" | ", names));
+            }
             sb.AppendLine($"grab: active={_manager.VrInput.Grab.Active} touching={_manager.VrInput.Grab.Touching} holding={_manager.VrInput.Grab.Holding} tip={_manager.VrInput.Grab.Tip}");
             sb.AppendLine($"game: placing={Game.Placing} plane={(Game.TryGetPlacementPlane(out float h) ? h.ToString("F2") : "-")} mode={(TimR.MainMenu.GameModeManager._ != null ? TimR.MainMenu.GameModeManager._.Mode.Value.ToString() : "?")}");
             Plugin.Log.LogInfo(sb.ToString());

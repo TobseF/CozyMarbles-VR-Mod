@@ -125,7 +125,7 @@ namespace CozyMarblesVR
 
             GUILayout.Space(14f);
             _dontShowAgain = GUILayout.Toggle(_dontShowAgain, Loc.T("  Dieses Fenster nicht mehr anzeigen (die Wahl wird gemerkt)", "  Do not show this window again (the choice is remembered)"), _toggle);
-            GUILayout.Label(Loc.T("Wieder einschalten: Knopf „Startfenster“ unten rechts im Spiel oder im VR-Menü. Wechsel VR ↔ Monitor jederzeit mit F9.", "To re-enable: “Start window” button at the bottom right in the game or in the VR menu. Switch VR ↔ monitor any time with F9."), _hint);
+            GUILayout.Label(Loc.T("Wieder einschalten: in den Spiel-Einstellungen („VR-Startfenster zeigen“) oder im VR-Menü. Wechsel VR ↔ Monitor jederzeit mit F9 oder über „VR %s“ unten rechts.".Replace("%s", Plugin.Version), "To re-enable: game settings (“Show VR start window”) or the VR menu. Switch VR ↔ monitor any time with F9 or via “VR %s” at the bottom right.".Replace("%s", Plugin.Version)), _hint);
             GUI.enabled = true;
             GUILayout.EndArea();
         }

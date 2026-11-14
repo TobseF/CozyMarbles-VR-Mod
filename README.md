@@ -88,7 +88,7 @@ If a game update removes the files in `Cozy Marbles_Data`, the mod restores them
 - If SteamVR wasn't running at launch, the mod keeps looking for it for ten minutes and then switches to VR by itself.
 - Without a headset the game simply runs on the monitor.
 - In the **start window** you choose the display, resolution and window mode. Check *Do not show this window again*
-  to remember your choice. The **Start window** button at the bottom right (or in the VR settings) brings it back.
+  to remember your choice. The switch **Show VR start window** in the game's settings (or in the VR settings) brings it back.
 
 ---
 
@@ -103,7 +103,7 @@ If a game update removes the files in `Cozy Marbles_Data`, the mod restores them
 | 🔦 **Pointer mode** | The game's original grid building, operated with a laser pointer. |
 | 🪟 **Menus in the room** | The main menu floats in front of you. The toolbar and build menu sit on your left hand. Object options appear right above the selected piece. |
 | 🎮 **Steam Frame controllers** | Native input profile and the real 3D controller models, loaded from your SteamVR installation. |
-| 🖥️ **VR ↔ monitor** | Switch any time with **F9** or the mode button. The PC window shows a calm spectator view. |
+| 🖥️ **VR ↔ monitor** | Switch any time with **F9**, the **Play in VR / Play on monitor** entry in the main menu, or the small **VR 0.1.0** label below the game's version number (hover = tooltip, click = confirmation). The PC window shows a calm spectator view. |
 | 🌍 **English & German** | All mod texts follow the game language (German → German, anything else → English). |
 
 ### Grab mode vs. pointer mode
@@ -232,8 +232,8 @@ cd CozyMarblesVR
 ```
 
 `make-dist.ps1` creates `dist\CozyMarblesVR.zip` (mod only) and `dist\CozyMarblesVR-with-BepInEx.zip`.
-Both mirror the game folder. Upload both as assets of a release tagged `v<version>` (the version is taken from
-`src/Plugin/Plugin.cs`). The asset names stay the same in every release, so
+Both mirror the game folder. Upload both as assets of a release tagged with the version from `src/Plugin/Plugin.cs`
+(e.g. `0.1.0`). The asset names stay the same in every release, so
 `https://github.com/TobseF/CozyMarbles-VR-Mod/releases/latest/download/CozyMarblesVR-with-BepInEx.zip` always points to
 the newest version, which helps installer hubs and scripts.
 

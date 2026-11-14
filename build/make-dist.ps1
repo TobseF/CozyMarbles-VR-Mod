@@ -74,4 +74,4 @@ foreach ($dir in $mod, $full) {
 Write-Host ''
 Write-Host "Cozy Marbles VR $version  (BepInEx $bepVersion in the full package)" -ForegroundColor Green
 Get-ChildItem $dist -Filter *.zip | ForEach-Object { Write-Host ("  {0,-34} {1,10:N0} bytes" -f $_.Name, $_.Length) }
-Write-Host "Upload both zips as assets of a GitHub release tagged v$version."
+Write-Host "Upload both zips as assets of a GitHub release tagged $version."
