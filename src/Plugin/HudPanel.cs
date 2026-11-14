@@ -47,7 +47,6 @@ namespace CozyMarblesVR
         {
             public readonly Transform Root, Quad, Bar, Corner, Gear;
             public readonly Material Mat, BarMat, CornerMat, GearMat;
-            public TMPro.TextMeshPro GearLabel;
             public Rect Crop;               // shown part of the texture, in texture (= mouse) pixels
             public Vector2 Anchor;          // texture pixel that sits at the panel's pose position
             public float MetersPerPixel = 0.0005f;
@@ -65,9 +64,9 @@ namespace CozyMarblesVR
                 Root.SetParent(parent, false);
                 Mat = CreateMaterial();
                 Quad = MakeQuad(name + " Picture", Mat, Root);
-                BarMat = WidgetMaterial(IdleColor);
-                CornerMat = WidgetMaterial(IdleColor);
-                GearMat = WidgetMaterial(GearColor);
+                BarMat = Icons.Material("grab_bar");
+                CornerMat = Icons.Material("resize");
+                GearMat = Icons.Material("btn_vr");
                 Bar = MakeQuad(name + " Grab Bar", BarMat, Root);
                 Corner = MakeQuad(name + " Scale Corner", CornerMat, Root);
                 Gear = MakeQuad(name + " VR Button", GearMat, Root);
@@ -103,36 +102,14 @@ namespace CozyMarblesVR
                 Mat.mainTextureScale = scale;
                 Mat.mainTextureOffset = offset;
 
+                // below the panel: round VR button, grip bar in the middle; small resize button at the lower right corner
                 float w = Crop.width * s;
                 float cx = (Crop.center.x - Anchor.x) * s, bottom = (Crop.yMin - Anchor.y) * s;
-                float barW = Mathf.Clamp(w * 0.28f, 0.14f, 0.5f), y = bottom - 0.03f;
-                SetWidget(Bar, HasWidgets, new Vector3(cx, y, 0f), new Vector3(barW, 0.022f, 1f));
-                SetWidget(Gear, HasWidgets && ShowGear, new Vector3(cx - barW * 0.5f - 0.06f, y, 0f), new Vector3(0.05f, 0.05f, 1f));
-                SetWidget(Corner, HasWidgets, new Vector3(cx + w * 0.5f + 0.02f, bottom - 0.02f, 0f), new Vector3(0.04f, 0.04f, 1f));
-                EnsureGearLabel();
-                if (GearLabel != null)
-                {
-                    if (GearLabel.gameObject.activeSelf != (HasWidgets && ShowGear)) GearLabel.gameObject.SetActive(HasWidgets && ShowGear);
-                    GearLabel.transform.localPosition = Gear.localPosition + new Vector3(0f, 0f, -0.002f);
-                    GearLabel.transform.localRotation = Quaternion.identity;
-                }
-            }
-
-            void EnsureGearLabel()
-            {
-                if (GearLabel != null || !HasWidgets || !ShowGear) return;
-                var font = VRSettingsPanel.FindFont();
-                if (font == null) return;
-                var go = new GameObject("VR Label") { layer = HudLayer };
-                go.transform.SetParent(Root, false);
-                GearLabel = go.AddComponent<TMPro.TextMeshPro>();
-                GearLabel.font = font;
-                GearLabel.text = "VR";
-                GearLabel.alignment = TMPro.TextAlignmentOptions.Center;
-                GearLabel.enableWordWrapping = false;
-                GearLabel.fontSize = 0.2f;
-                GearLabel.color = Color.white;
-                GearLabel.rectTransform.sizeDelta = new Vector2(0.05f, 0.05f);
+                float barW = Mathf.Clamp(w * 0.2f, 0.14f, 0.32f), barH = barW / 5f, y = bottom - 0.012f - barH * 0.5f;
+                float gear = Mathf.Max(0.042f, barH * 1.4f);
+                SetWidget(Bar, HasWidgets, new Vector3(cx, y, 0f), new Vector3(barW, barH, 1f));
+                SetWidget(Gear, HasWidgets && ShowGear, new Vector3(cx - barW * 0.5f - 0.012f - gear * 0.5f, y, 0f), new Vector3(gear, gear, 1f));
+                SetWidget(Corner, HasWidgets, new Vector3(cx + w * 0.5f + 0.016f, bottom - 0.016f, 0f), new Vector3(0.03f, 0.03f, 1f));
             }
 
             /// <summary>Laser hit on the picture: pixel in texture (= mouse) coordinates.</summary>
@@ -173,70 +150,45 @@ namespace CozyMarblesVR
 
             public void SetHover(Widget w, bool moving, bool scaling)
             {
-                BarMat.color = (w == Widget.Bar || moving) ? HotColor : IdleColor;
-                CornerMat.color = (w == Widget.Corner || scaling) ? HotColor : IdleColor;
-                GearMat.color = w == Widget.Settings ? new Color(0.45f, 0.7f, 1f, 1f) : GearColor;
+                BarMat.color = (w == Widget.Bar || moving) ? HotTint : Color.white;
+                CornerMat.color = (w == Widget.Corner || scaling) ? HotTint : Color.white;
+                GearMat.color = w == Widget.Settings ? HotTint : Color.white;
             }
         }
 
-        /// <summary>A small round-ish button of the mod itself ("i" = controls help, "VR" = VR settings).</summary>
+        /// <summary>A button of the mod itself, drawn from an icon (round VR / manual buttons, mouse-hand toggle).</summary>
         class MiniButton
         {
             public readonly Transform Quad;
             public readonly Material Mat;
-            public string Text;
-            public Color Base;
-            public float FontScale = 1f;
-            public TMPro.TextMeshPro Label;
-            readonly Transform _parent;
+            public float Aspect = 1f;   // width / height
+            string _icon;
 
-            public MiniButton(string name, string text, Color color, Transform parent)
+            public MiniButton(string name, string icon, Transform parent)
             {
-                _parent = parent;
-                Text = text;
-                Base = color;
-                Mat = WidgetMaterial(color);
+                _icon = icon;
+                Mat = Icons.Material(icon);
                 Quad = MakeQuad(name, Mat, parent);
                 Quad.gameObject.SetActive(false);
             }
 
-            public void Place(bool show, Vector3 pos, Quaternion rot, float size)
+            public void Place(bool show, Vector3 pos, Quaternion rot, float height)
             {
                 if (Quad.gameObject.activeSelf != show) Quad.gameObject.SetActive(show);
-                if (Label != null && Label.gameObject.activeSelf != show) Label.gameObject.SetActive(show);
                 if (!show) return;
                 Quad.localPosition = pos;
                 Quad.localRotation = rot;
-                Quad.localScale = new Vector3(size, size, 1f);
-                if (Label == null)
-                {
-                    var font = VRSettingsPanel.FindFont();
-                    if (font == null) return;
-                    var go = new GameObject(Quad.name + " Label") { layer = HudLayer };
-                    go.transform.SetParent(_parent, false);
-                    Label = go.AddComponent<TMPro.TextMeshPro>();
-                    Label.font = font;
-                    Label.text = Text;
-                    Label.alignment = TMPro.TextAlignmentOptions.Center;
-                    Label.enableWordWrapping = false;
-                    Label.color = Color.white;
-                }
-                if (Label.text != Text) Label.text = Text;
-                Label.fontSize = size * 4f * FontScale;
-                Label.rectTransform.sizeDelta = new Vector2(size, size);
-                Label.transform.localPosition = pos + rot * new Vector3(0f, 0f, -0.002f);
-                Label.transform.localRotation = rot;
+                Quad.localScale = new Vector3(height * Aspect, height, 1f);
             }
 
-            public void SetMode(string text, Color color)
+            public void SetIcon(string icon)
             {
-                Text = text;
-                Base = color;
-                if (Label != null) Label.text = text;
-                Mat.color = color;
+                if (icon == _icon) return;
+                _icon = icon;
+                Mat.mainTexture = Icons.Get(icon);
             }
 
-            public void SetHover(bool hover) { Mat.color = hover ? new Color(0.45f, 0.7f, 1f, 1f) : Base; }
+            public void SetHover(bool hover) { Mat.color = hover ? HotTint : Color.white; }
         }
 
         /// <summary>One part of the game's top bar, shown as its own small panel above the left-hand menu.</summary>
@@ -244,7 +196,7 @@ namespace CozyMarblesVR
         {
             public string Name;
             public float Scale = 1f;
-            public RectTransform Src;
+            public readonly List<RectTransform> Srcs = new List<RectTransform>();
             public PanelView View;
             public bool Found;
         }
@@ -257,9 +209,7 @@ namespace CozyMarblesVR
             t.localScale = scale;
         }
 
-        static readonly Color IdleColor = new Color(0.85f, 0.85f, 0.9f, 0.55f);
-        static readonly Color HotColor = new Color(1f, 0.85f, 0.3f, 0.95f);
-        static readonly Color GearColor = new Color(0.3f, 0.55f, 0.95f, 0.85f);
+        static readonly Color HotTint = new Color(1f, 0.86f, 0.5f, 1f); // hover: icons turn warm yellow
 
         // ---------------------------------------------------------------- state
 
@@ -340,28 +290,17 @@ namespace CozyMarblesVR
             _build = new PanelView("CozyVR Build Panel", rig) { Solid = true, ShowGear = false };
             _options = new PanelView("CozyVR Options Panel", rig) { Solid = true };
             _overlay = new PanelView("CozyVR World Labels", rig) { Solid = false };
-            // top bar parts: pause button (small, enlarged), undo/redo/play/delete, race, camera reset
-            foreach (var (name, scale) in new[] { ("pause", 1.8f), ("center", 1f), ("racing", 1f), ("camreset", 1f) })
-                _tiles.Add(new Tile { Name = name, Scale = scale, View = new PanelView("CozyVR Bar " + name, rig) { Solid = true } });
-            _miniInfo = new MiniButton("CozyVR Info Button", "i", new Color(0.35f, 0.3f, 0.5f, 0.92f), rig);
-            _miniVr = new MiniButton("CozyVR VR Button", "VR", GearColor, rig);
-            _miniGrab = new MiniButton("CozyVR Grab Button", Loc.T("Maus", "Mouse"), PointerModeColor, rig) { FontScale = 0.6f };
+            // top bar parts, left to right: main menu, undo/redo, prepare/roll marbles, delete, race, camera reset.
+            // "center" (undo..delete in one piece) is only used when the single buttons cannot be found.
+            foreach (var name in new[] { "pause", "undo", "play", "delete", "center", "racing", "camreset" })
+                _tiles.Add(new Tile { Name = name, View = new PanelView("CozyVR Bar " + name, rig) { Solid = true } });
+            _miniInfo = new MiniButton("CozyVR Info Button", "btn_manual", rig);
+            _miniVr = new MiniButton("CozyVR VR Button", "btn_vr", rig);
+            _miniGrab = new MiniButton("CozyVR Grab Button", "toggle_mouse", rig) { Aspect = 2f };
         }
 
-        static readonly Color PointerModeColor = new Color(0.3f, 0.55f, 0.35f, 0.92f);
-        static readonly Color GrabModeColor = new Color(0.9f, 0.55f, 0.15f, 0.95f);
-        bool _grabLabelKnown, _grabLabelState, _grabLabelDe;
-
-        /// <summary>Shows the current mode on the quick-access toggle: "Maus" = pointer, "Hand" = grab mode.</summary>
-        public void SetGrabLabel(bool grab)
-        {
-            bool de = Loc.German;
-            if (_grabLabelKnown && _grabLabelState == grab && _grabLabelDe == de) return;
-            _grabLabelKnown = true;
-            _grabLabelDe = de;
-            _grabLabelState = grab;
-            _miniGrab.SetMode(grab ? Loc.T("Hand", "Hand") : Loc.T("Maus", "Mouse"), grab ? GrabModeColor : PointerModeColor);
-        }
+        /// <summary>Shows the current mode on the toggle: knob left on the mouse pointer, or right on the hand.</summary>
+        public void SetGrabLabel(bool grab) => _miniGrab.SetIcon(grab ? "toggle_hand" : "toggle_mouse");
 
         static Mesh _quadMesh;
 
@@ -520,7 +459,7 @@ namespace CozyMarblesVR
             _barCanvases.Clear();
             _mainCanvases.Clear();
             _pauseCanvas = null;
-            foreach (var t in _tiles) { t.Src = null; t.Found = false; t.View.Placement = Placement.Hidden; t.View.Root.gameObject.SetActive(false); }
+            foreach (var t in _tiles) { t.Srcs.Clear(); t.Found = false; t.View.Placement = Placement.Hidden; t.View.Root.gameObject.SetActive(false); }
             _miniInfo.Place(false, default, Quaternion.identity, 0f);
             _miniVr.Place(false, default, Quaternion.identity, 0f);
             _miniGrab.Place(false, default, Quaternion.identity, 0f);
@@ -714,23 +653,61 @@ namespace CozyMarblesVR
             return null;
         }
 
+        static readonly System.Reflection.FieldInfo UndoField = HarmonyLib.AccessTools.Field(typeof(TimR.CtrlZ.UndoManager), "_undoButton");
+        static readonly System.Reflection.FieldInfo RedoField = HarmonyLib.AccessTools.Field(typeof(TimR.CtrlZ.UndoManager), "_redoButton");
+        static readonly System.Reflection.FieldInfo RollField = HarmonyLib.AccessTools.Field(typeof(TimR.UI.RollMarbleUi), "_rollMarbleButton");
+
         void FindBarSources()
         {
-            foreach (var t in _tiles) t.Src = null;
+            foreach (var t in _tiles) t.Srcs.Clear();
             foreach (var c in _barCanvases)
             {
                 if (c == null) continue;
-                SetSource("center", FindDeep(c.transform, "center parent"));
-                SetSource("racing", FindDeep(c.transform, "racing parent"));
-                SetSource("camreset", FindDeep(c.transform, "cam reset parent"));
+                var center = FindDeep(c.transform, "center parent") as RectTransform;
+                if (center != null && !SplitCenter(center)) AddSource("center", center);
+                AddSource("racing", FindDeep(c.transform, "racing parent"));
+                AddSource("camreset", FindDeep(c.transform, "cam reset parent"));
             }
-            if (_pauseCanvas != null) SetSource("pause", FindDeep(_pauseCanvas.transform, "btn_open_menu"));
+            if (_pauseCanvas != null) AddSource("pause", FindDeep(_pauseCanvas.transform, "btn_open_menu"));
         }
 
-        void SetSource(string name, Transform t)
+        /// <summary>
+        /// Splits the game's middle group into undo/redo, the big marble button and the rest (delete), so each can be
+        /// shown at the same height. False if the buttons are not where they are expected.
+        /// </summary>
+        bool SplitCenter(RectTransform center)
         {
-            if (t == null) return;
-            foreach (var tile in _tiles) if (tile.Name == name) tile.Src = t as RectTransform;
+            try
+            {
+                var undoMgr = Object.FindFirstObjectByType<TimR.CtrlZ.UndoManager>(FindObjectsInactive.Include);
+                var rollUi = Object.FindFirstObjectByType<TimR.UI.RollMarbleUi>(FindObjectsInactive.Include);
+                var undo = undoMgr != null ? UndoField?.GetValue(undoMgr) as Button : null;
+                var redo = undoMgr != null ? RedoField?.GetValue(undoMgr) as Button : null;
+                var play = rollUi != null ? RollField?.GetValue(rollUi) as Button : null;
+                if (undo == null || play == null || !undo.transform.IsChildOf(center) || !play.transform.IsChildOf(center)) return false;
+                var own = new List<Transform> { undo.transform, play.transform };
+                AddSource("undo", undo.transform);
+                if (redo != null && redo.transform.IsChildOf(center)) { own.Add(redo.transform); AddSource("undo", redo.transform); }
+                AddSource("play", play.transform);
+                foreach (var b in center.GetComponentsInChildren<Button>(true))
+                {
+                    bool related = false;
+                    foreach (var o in own) if (b.transform.IsChildOf(o) || o.IsChildOf(b.transform)) { related = true; break; }
+                    if (!related) AddSource("delete", b.transform);
+                }
+                return true;
+            }
+            catch (System.Exception e)
+            {
+                Plugin.Log.LogWarning("Top bar split failed: " + e.Message);
+                return false;
+            }
+        }
+
+        void AddSource(string name, Transform t)
+        {
+            if (!(t is RectTransform rt)) return;
+            foreach (var tile in _tiles) if (tile.Name == name && !tile.Srcs.Contains(rt)) tile.Srcs.Add(rt);
         }
 
         /// <summary>The controls cheat sheet and the Twitch bar are replaced by the mod's own info button; the top bar's backdrop gradient would stretch the panel over the whole width.</summary>
@@ -770,27 +747,32 @@ namespace CozyMarblesVR
             if (_pauseCanvas.worldCamera != want) _pauseCanvas.worldCamera = want;
         }
 
-        /// <summary>Rectangle of a bar element in atlas pixels, or false when it is not visible right now.</summary>
-        bool TileRect(RectTransform src, out Rect rect)
+        /// <summary>Rectangle (atlas pixels) around the visible ones of a tile's elements, or false when none is visible.</summary>
+        bool TileRect(List<RectTransform> srcs, out Rect rect)
         {
             rect = default;
-            if (src == null || _barCam == null || !src.gameObject.activeInHierarchy) return false;
-            var canvas = src.GetComponentInParent<Canvas>();
-            if (canvas == null || !canvas.enabled) return false;
-            bool any = false;
-            foreach (var g in src.GetComponentsInChildren<Graphic>(false))
-                if (g.enabled && g.color.a >= 0.02f && !g.canvasRenderer.cull && g.canvasRenderer.GetInheritedAlpha() >= 0.02f) { any = true; break; }
-            if (!any) return false;
-            var corners = new Vector3[4];
-            src.GetWorldCorners(corners);
+            if (_barCam == null) return false;
             float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
-            for (int i = 0; i < 4; i++)
+            var corners = new Vector3[4];
+            foreach (var src in srcs)
             {
-                Vector2 p = RectTransformUtility.WorldToScreenPoint(_barCam, corners[i]);
-                x0 = Mathf.Min(x0, p.x); y0 = Mathf.Min(y0, p.y); x1 = Mathf.Max(x1, p.x); y1 = Mathf.Max(y1, p.y);
+                if (src == null || !src.gameObject.activeInHierarchy) continue;
+                var canvas = src.GetComponentInParent<Canvas>();
+                if (canvas == null || !canvas.enabled) continue;
+                bool any = false;
+                foreach (var g in src.GetComponentsInChildren<Graphic>(false))
+                    if (g.enabled && g.color.a >= 0.02f && !g.canvasRenderer.cull && g.canvasRenderer.GetInheritedAlpha() >= 0.02f) { any = true; break; }
+                if (!any) continue;
+                src.GetWorldCorners(corners);
+                for (int i = 0; i < 4; i++)
+                {
+                    Vector2 p = RectTransformUtility.WorldToScreenPoint(_barCam, corners[i]);
+                    x0 = Mathf.Min(x0, p.x); y0 = Mathf.Min(y0, p.y); x1 = Mathf.Max(x1, p.x); y1 = Mathf.Max(y1, p.y);
+                }
             }
+            if (x1 <= x0) return false;
             int w = TextureWidth, h = TextureHeight;
-            const float pad = 6f;
+            const float pad = 4f;
             x0 = Mathf.Clamp(x0 - pad, 3f * w, 4f * w); x1 = Mathf.Clamp(x1 + pad, 3f * w, 4f * w);
             y0 = Mathf.Clamp(y0 - pad, 0f, h); y1 = Mathf.Clamp(y1 + pad, 0f, h);
             if (x1 - x0 < 4f || y1 - y0 < 4f) return false;
@@ -802,7 +784,7 @@ namespace CozyMarblesVR
         {
             foreach (var t in _tiles)
             {
-                t.Found = TileRect(t.Src, out Rect r);
+                t.Found = TileRect(t.Srcs, out Rect r);
                 if (t.Found) { t.View.Crop = r; t.View.Anchor = r.center; }
             }
         }
@@ -813,60 +795,60 @@ namespace CozyMarblesVR
             return null;
         }
 
-        /// <summary>Lays the top-bar tiles and the two mod buttons out in one row above the left-hand toolbox.</summary>
+        Tile FindTile(string name)
+        {
+            foreach (var t in _tiles) if (t.Name == name) return t;
+            return null;
+        }
+
+        /// <summary>
+        /// The menu around the left-hand toolbox. One row above it, everything at the height of the game's big marble
+        /// button: undo/redo, marble button, delete, race, camera reset, mouse/hand toggle. The main menu button sits
+        /// in front of the row, left of the toolbox; the round VR and manual buttons hang below it as a column.
+        /// </summary>
         void LayoutBar()
         {
             bool show = _build.Placement != Placement.Hidden;
-            float mpp = _build.MetersPerPixel;
-            const float gap = 22f, mini = 92f;
-
-            var parts = new List<KeyValuePair<float, System.Action<Vector3>>>();   // width in px, placer
-            float rowH = 0f;
-            foreach (var t in _tiles)
+            if (!show)
             {
-                if (!show || !t.Found) { t.View.Placement = Placement.Hidden; t.View.Apply(); continue; }
-                var tile = t;
-                float tw = tile.View.Crop.width * tile.Scale, th = tile.View.Crop.height * tile.Scale;
-                rowH = Mathf.Max(rowH, th);
-                parts.Add(new KeyValuePair<float, System.Action<Vector3>>(tw, local =>
-                {
-                    tile.View.Placement = _build.Placement;
-                    tile.View.Pos = _build.Pos + _build.Rot * local;
-                    tile.View.Rot = _build.Rot;
-                    tile.View.MetersPerPixel = mpp * tile.Scale;
-                    tile.View.Apply();
-                }));
-            }
-            if (show)
-            {
-                rowH = Mathf.Max(rowH, mini);
-                var minis = new[] { _miniGrab, _miniInfo, _miniVr };
-                foreach (var m in minis)
-                {
-                    var mb = m;
-                    parts.Add(new KeyValuePair<float, System.Action<Vector3>>(mini, local =>
-                        mb.Place(true, _build.Pos + _build.Rot * local, _build.Rot, Mathf.Max(0.03f, mini * mpp))));
-                }
-            }
-            else
-            {
+                foreach (var t in _tiles) { t.View.Placement = Placement.Hidden; t.View.Apply(); }
                 _miniInfo.Place(false, default, Quaternion.identity, 0f);
                 _miniVr.Place(false, default, Quaternion.identity, 0f);
                 _miniGrab.Place(false, default, Quaternion.identity, 0f);
                 return;
             }
 
-            float total = -gap;
-            foreach (var part in parts) total += part.Key + gap;
-            float cx = (_build.Crop.center.x - _build.Anchor.x) * mpp;
-            float baseY = (_build.Crop.yMax - _build.Anchor.y) + 30f;
-            float x = -total * 0.5f;
-            foreach (var part in parts)
+            float mpp = _build.MetersPerPixel;
+            const float gap = 16f;
+            var play = FindTile("play");
+            var center = FindTile("center");
+            float rowH = play != null && play.Found ? play.View.Crop.height : center != null && center.Found ? center.View.Crop.height : 70f;
+            rowH = Mathf.Max(rowH, 40f);
+
+            float left = _build.Crop.xMin - _build.Anchor.x;          // toolbox's left edge, in pixels from its anchor
+            float colX = left - gap - rowH * 0.5f;
+            float rowY = (_build.Crop.yMax - _build.Anchor.y) + 30f + rowH * 0.5f;
+            System.Func<float, float, Vector3> at = (px, py) => _build.Pos + _build.Rot * new Vector3(px * mpp, py * mpp, 0f);
+
+            float x = left;
+            foreach (var t in _tiles)
             {
-                float centerX = x + part.Key * 0.5f;
-                x += part.Key + gap;
-                part.Value(new Vector3(cx + centerX * mpp, (baseY + rowH * 0.5f) * mpp, 0f));
+                if (!t.Found) { t.View.Placement = Placement.Hidden; t.View.Apply(); continue; }
+                t.Scale = rowH / Mathf.Max(1f, t.View.Crop.height);
+                float tw = t.View.Crop.width * t.Scale;
+                float cxp;
+                if (t.Name == "pause") cxp = colX;
+                else { cxp = x + tw * 0.5f; x += tw + gap; }
+                t.View.Placement = _build.Placement;
+                t.View.Pos = at(cxp, rowY);
+                t.View.Rot = _build.Rot;
+                t.View.MetersPerPixel = mpp * t.Scale;
+                t.View.Apply();
             }
+            float size = rowH * mpp;
+            _miniGrab.Place(true, at(x + rowH, rowY), _build.Rot, size);
+            _miniVr.Place(true, at(colX, rowY - (rowH + gap)), _build.Rot, size);
+            _miniInfo.Place(true, at(colX, rowY - 2f * (rowH + gap)), _build.Rot, size);
         }
 
         /// <summary>

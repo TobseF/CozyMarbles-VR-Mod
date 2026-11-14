@@ -25,6 +25,14 @@ namespace CozyMarblesVR
             Plugin.Log.LogInfo("Grab mode " + (Active ? "on" : "off"));
         }
 
+        /// <summary>Position of the ball at the controller tip (world space), also while the laser is on a menu.</summary>
+        public Vector3 UpdateTip(Ray aim)
+        {
+            float s = Mathf.Max(0.0001f, _rig.lossyScale.x);
+            Tip = aim.origin + aim.direction * (0.03f * s);
+            return Tip;
+        }
+
         /// <summary>
         /// The ray handed to the game as "mouse ray". Placing a piece: a vertical ray onto the game's placement plane
         /// right below the ball (the plane height follows the hand). Otherwise: a short probe along the controller that
@@ -33,11 +41,13 @@ namespace CozyMarblesVR
         public Ray BuildRay(Ray aim, int mask, out Vector3 tip)
         {
             float s = Mathf.Max(0.0001f, _rig.lossyScale.x);
-            tip = aim.origin + aim.direction * (0.03f * s);
-            Tip = tip;
+            tip = UpdateTip(aim);
             if (Game.Placing)
             {
                 Touching = false;
+                // decorations sit freely on the surface right below the ball (no grid, no placement plane)
+                if (Game.PlacingDecoOnly)
+                    return new Ray(tip + Vector3.up * (0.03f * s), Vector3.down);
                 Game.TrackHeight(tip.y);
                 if (Game.TryGetPlacementPlane(out float py))
                     return new Ray(new Vector3(tip.x, py + 5f, tip.z), Vector3.down);

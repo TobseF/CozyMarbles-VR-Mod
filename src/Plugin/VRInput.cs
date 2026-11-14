@@ -522,6 +522,7 @@ namespace CozyMarblesVR
                 var ray = new Ray(origin, dir);
                 var localRay = new Ray(_aimPos, (_aimRot * Vector3.forward).normalized);
                 AimOriginWorld = origin;
+                Grab.UpdateTip(ray); // the ball stays visible on the controller while the laser is on a menu
 
                 // the mod's own widgets (grab bar, scale corner, VR button, settings panel) come first
                 if (HandleWidgets(ray, localRay, dt, out Vector3 widgetPoint))

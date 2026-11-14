@@ -77,6 +77,34 @@ namespace CozyMarblesVR
             }
         }
 
+        /// <summary>
+        /// Only a decoration is being placed or moved (no structure). Decorations are not bound to the grid: the game
+        /// puts them on whatever surface the pointer ray hits (with the magnet off they never snap anywhere).
+        /// </summary>
+        public static bool PlacingDecoOnly
+        {
+            get
+            {
+                try
+                {
+                    return _deco != null && _deco.IsInSpawnMoveOrDuplicateMode && (_spawner == null || !_spawner.IsInSpawnMoveOrDuplicateMode);
+                }
+                catch { return false; }
+            }
+        }
+
+        /// <summary>Diagnostics: where the decoration preview sits and what the pointer ray hits for it.</summary>
+        public static string DebugDeco()
+        {
+            try
+            {
+                if (_deco == null) return "deco: -";
+                bool hit = _deco.RaycastForDeco(VRShim.PointerRay, out RaycastHit h);
+                return $"deco: placing={_deco.IsInSpawnMoveOrDuplicateMode} pos={_deco.DecoPos.Value} rayHit={hit} at={(hit ? h.point.ToString() + " " + h.collider.name : "-")}";
+            }
+            catch (Exception e) { return "deco: " + e.Message; }
+        }
+
         /// <summary>Height of the horizontal plane the game intersects the pointer with while placing structures.</summary>
         public static bool TryGetPlacementPlane(out float height)
         {

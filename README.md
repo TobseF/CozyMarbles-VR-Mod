@@ -108,20 +108,22 @@ If a game update removes the files in `Cozy Marbles_Data`, the mod restores them
 
 ### Grab mode vs. pointer mode
 
-The **Mouse / Hand** button in the left-hand menu switches modes. You can also **double-tap the left bumper**.
+The **mouse/hand toggle** in the left-hand menu switches modes (the ball appears on the controller right away). You can also **double-tap the left bumper**.
 
 - **Hand:** a small ball replaces the laser at the tip of the controller. Touch a piece (the ball turns yellow) and
   **hold the trigger**: the piece hangs on your hand and follows it freely, without the grid. Twist the controller to
   turn it in 90° steps. The height follows your hand. **Release** to set it down where the transparent preview shows.
   New pieces from the build menu hang on your hand in the same way and are placed with a trigger press.
+  Decorations are not bound to the grid: with the **magnet** off they land exactly on the surface below the ball.
 - **Mouse:** the game's original building on the grid, with the laser as your mouse pointer. In menus the laser
   appears automatically in both modes.
 
 ### Windows in VR
 
 - **Main menu** (also pause and dialogs): floats fixed in the room and always stays in front of the game objects.
-- **Left-hand menu:** the game's toolbar (menu, undo/redo, play, delete, race, reset camera) as tiles above the
-  build menu, plus **Mouse/Hand**, **i** (the VR controls for your current button layout) and **VR** (VR settings).
+- **Left-hand menu:** the game's toolbar (undo/redo, play, delete, race, reset camera) in one row above the build
+  menu, followed by the **mouse/hand toggle**. Left of the build menu sits the round menu button with **VR settings**
+  (gear) and the **manual** (VR controls for your current button layout) below it.
   Tap the left trigger to open or close the toolbar, hold it to carry the whole menu on your hand, and release it to
   leave the menu where it is.
 - **Object menu:** select a piece and its options (move, color, delete, settings) appear right above it, turned
@@ -129,7 +131,7 @@ The **Mouse / Hand** button in the left-hand menu switches modes. You can also *
 - **Labels on objects** (marble names, starter and checkpoint info, portal links, selection box) appear right in
   front of their object, and you can press their buttons with the laser.
 - Every free-standing window has a small bar underneath: grab the **bar** to move it (right stick = further/closer),
-  drag the **corner** to resize it, and press **VR** for the VR settings. Everything is saved.
+  drag the round **resize** button at the corner to resize it, and press the **gear** for the VR settings. Everything is saved.
 
 ---
 

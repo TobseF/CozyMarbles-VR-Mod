@@ -53,6 +53,7 @@ function Invoke-Csc {
         [Parameter(Mandatory)][string[]]$References,
         [string[]]$Defines = @(),
         [switch]$Unsafe,
+        [string[]]$Resources = @(),
         [string]$RspDir = $env:TEMP
     )
     $csc = Find-Csc
@@ -64,6 +65,7 @@ function Invoke-Csc {
     if ($Defines.Count) { $lines += '-define:' + ($Defines -join ';') }
     foreach ($r in $References) { $lines += "-r:`"$r`"" }
     foreach ($s in $Sources) { $lines += "`"$s`"" }
+    foreach ($res in $Resources) { $lines += "-resource:$res" }
     Set-Content -Path $rsp -Value $lines -Encoding UTF8
     $output = & $csc "@$rsp" 2>&1
     $errors = $output | Where-Object { $_ -match '\berror\b' }

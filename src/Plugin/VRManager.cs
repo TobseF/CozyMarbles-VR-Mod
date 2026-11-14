@@ -28,8 +28,10 @@ namespace CozyMarblesVR
         AudioListener _gameListener, _vrListener;
 
         LineRenderer _laser;
-        Transform _reticle, _handL, _handR;
-        Material _laserMat, _reticleMat, _handMat;
+        Transform _reticle, _tipBall, _handL, _handR;
+        bool _lastGrabMode;
+        float _grabPulse;
+        Material _laserMat, _reticleMat, _handMat, _ballMat;
 
         bool _active;
         float _scale = 8f;
@@ -138,6 +140,8 @@ namespace CozyMarblesVR
             _laser.enabled = false;
 
             _reticle = Primitive("CozyVR Reticle", PrimitiveType.Sphere, _reticleMat);
+            _ballMat = ColorMaterial(new Color(1f, 1f, 1f, 0.9f));
+            _tipBall = Primitive("CozyVR Grab Ball", PrimitiveType.Sphere, _ballMat);
             _handL = Primitive("CozyVR Hand L", PrimitiveType.Cube, _handMat);
             _handR = Primitive("CozyVR Hand R", PrimitiveType.Cube, _handMat);
             _handL.localScale = _handR.localScale = new Vector3(0.03f, 0.03f, 0.09f);
@@ -293,7 +297,7 @@ namespace CozyMarblesVR
             }
             _gameCam = null;
             if (_laser != null) _laser.enabled = false;
-            foreach (var t in new[] { _reticle, _handL, _handR })
+            foreach (var t in new[] { _reticle, _tipBall, _handL, _handR })
                 if (t != null) t.gameObject.SetActive(false);
             Plugin.Log.LogInfo("VR inactive, back to the monitor.");
         }
@@ -593,10 +597,27 @@ namespace CozyMarblesVR
         void UpdateVisuals()
         {
             bool show = _active && _input.PointerValid;
-            bool grab = show && _input.Grab.Active && !_input.OverUi && !_input.NavActive;
+            bool grabMode = show && _input.Grab.Active && !_input.NavActive;
+            bool grab = grabMode && !_input.OverUi;
             bool showLaser = show && !_input.NavActive && !grab;
             if (_laser.enabled != showLaser) _laser.enabled = showLaser;
             if (_reticle.gameObject.activeSelf != show) _reticle.gameObject.SetActive(show);
+
+            // switching between pointer and hand mode: the ball pops up (or vanishes) right away, with a short pulse
+            bool grabNow = _input.Grab.Active;
+            if (grabNow != _lastGrabMode) { _lastGrabMode = grabNow; _grabPulse = grabNow ? 1f : 0f; }
+            _grabPulse = Mathf.Max(0f, _grabPulse - Time.unscaledDeltaTime / 0.35f);
+            float pulse = 1f + 0.9f * Mathf.Sin(_grabPulse * Mathf.PI) * _grabPulse;
+            float ballSize = 0.014f * _scale * pulse;
+
+            // hand mode while the laser is on a menu: the laser works the menu, the ball still sits on the controller
+            bool tipBall = grabMode && _input.OverUi;
+            if (_tipBall.gameObject.activeSelf != tipBall) _tipBall.gameObject.SetActive(tipBall);
+            if (tipBall)
+            {
+                _tipBall.position = _input.Grab.Tip;
+                _tipBall.localScale = Vector3.one * (ballSize / _scale);
+            }
             if (show)
             {
                 Vector3 a = _input.AimOriginWorld, b = _input.ReticleWorld;
@@ -607,7 +628,7 @@ namespace CozyMarblesVR
                 _laser.SetPosition(1, b);
                 float dist = Vector3.Distance(_vrCam.transform.position, b);
                 _reticle.position = b;
-                float size = grab ? 0.014f * _scale : Mathf.Max(0.004f * _scale, dist * (_input.OverUi ? 0.009f : 0.012f));
+                float size = grab ? ballSize :Mathf.Max(0.004f * _scale, dist * (_input.OverUi ? 0.009f : 0.012f));
                 _reticle.localScale = Vector3.one * (size / _scale);
                 Color rc = _input.OverUi ? new Color(1f, 0.85f, 0.3f, 1f) : new Color(1f, 1f, 1f, 0.95f);
                 if (grab) rc = _input.Grab.Holding ? new Color(1f, 0.55f, 0.1f, 1f) : _input.Grab.Touching ? new Color(1f, 0.85f, 0.3f, 1f) : new Color(1f, 1f, 1f, 0.9f);
@@ -679,6 +700,7 @@ namespace CozyMarblesVR
             return $"rig: pos={_rig.position} rot={_rig.eulerAngles} scale={_scale:F2} anchor={_anchor} yawOffset={_yawOffset:F1} head(local)={_tracking.HeadPos}/{_tracking.HeadRot.eulerAngles} headValid={_tracking.HeadValid} sim={_tracking.Simulated}\n" +
                    $"hands: L valid={_tracking.Left.Valid} pos={_tracking.Left.GripPos} | R valid={_tracking.Right.Valid} pos={_tracking.Right.GripPos} aimRot={_tracking.Right.AimRot.eulerAngles} trig={_tracking.Right.Trigger:F2}\n" +
                    $"handR obj: active={_handR.gameObject.activeSelf} model={_handModels} pos={_handR.position} scale={_handR.lossyScale} shader={_handR.GetComponent<MeshRenderer>().sharedMaterial.shader.name} bounds={_handR.GetComponent<MeshRenderer>().bounds.size} layer={_handR.gameObject.layer}\n" +
+                   $"ball: active={_tipBall.gameObject.activeInHierarchy} pos={_tipBall.position} scale={_tipBall.lossyScale}\n" +
                    $"input: pointerValid={_input.PointerValid} overUi={_input.OverUi} reticle={_input.ReticleWorld} origin={_input.AimOriginWorld} locomotion={LocomotionActive} gameCam={(_gameCam ? _gameCam.transform.position.ToString() : "-")}\n" +
                    _hud.DebugState() + "\n" +
                    $"menu: context={_input.MenuContext} nav={_input.NavActive} frameL={_tracking.Left.IsFrame} frameR={_tracking.Right.IsFrame} | {_input.DescribeUiClickControls()}";
@@ -695,9 +717,9 @@ namespace CozyMarblesVR
             SimOverride.AimWorld = world;
         }
 
-        public void DebugHandShot(string path, bool left, float yaw, float pitch)
+        public void DebugHandShot(string path, string which, float yaw, float pitch)
         {
-            var h = left ? _handL : _handR;
+            var h = which == "b" ? _tipBall : which == "l" ? _handL : _handR;
             if (h == null || !h.gameObject.activeSelf) return;
             var rt = new RenderTexture(900, 900, 24, RenderTextureFormat.ARGB32);
             var go = new GameObject("CozyVR Hand Capture");

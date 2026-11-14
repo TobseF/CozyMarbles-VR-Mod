@@ -93,7 +93,7 @@ namespace CozyMarblesVR
                 case "shot": ScreenCapture.CaptureScreenshot(Path.Combine(OutDir, a[1] + ".png")); break;
                 case "uishot": SaveUiTexture(Path.Combine(OutDir, a[1] + ".png")); break;
                 case "eyeshot": _manager.DebugCaptureEye(Path.Combine(OutDir, a[1] + ".png")); break;
-                case "handshot": _manager.DebugHandShot(Path.Combine(OutDir, a[1] + ".png"), a[2] == "l", F(a[3]), F(a[4])); break;
+                case "handshot": _manager.DebugHandShot(Path.Combine(OutDir, a[1] + ".png"), a[2], F(a[3]), F(a[4])); break;
                 case "grab": Plugin.Cfg.GrabMode.Value = a[1] == "on"; break;
                 case "handabove": _manager.DebugHandAbove(new Vector3(F(a[1]), F(a[2]), F(a[3])), F(a[4])); break;
                 case "dump": Dump(); break;
@@ -240,6 +240,7 @@ namespace CozyMarblesVR
             }
             sb.AppendLine($"grab: active={_manager.VrInput.Grab.Active} touching={_manager.VrInput.Grab.Touching} holding={_manager.VrInput.Grab.Holding} tip={_manager.VrInput.Grab.Tip}");
             sb.AppendLine($"game: placing={Game.Placing} plane={(Game.TryGetPlacementPlane(out float h) ? h.ToString("F2") : "-")} mode={(TimR.MainMenu.GameModeManager._ != null ? TimR.MainMenu.GameModeManager._.Mode.Value.ToString() : "?")}");
+            sb.AppendLine(Game.DebugDeco());
             Plugin.Log.LogInfo(sb.ToString());
         }
     }

@@ -34,7 +34,9 @@ $refs = Get-GameReferences (@(
     (Join-Path $LibDir 'Unity.XR.Management.dll'), (Join-Path $LibDir 'Unity.XR.OpenXR.dll')) +
     ('Unity.InputSystem.dll', 'Unity.RenderPipelines.Core.Runtime.dll', 'Unity.RenderPipelines.Universal.Runtime.dll',
      'Unity.Cinemachine.dll', 'Unity.TextMeshPro.dll', 'Assembly-CSharp.dll', 'TimR.Events.dll', 'TimR.Init.dll', 'UniRx.dll' | ForEach-Object { Join-Path $Managed $_ }))
-Invoke-Csc -Out (Join-Path $pluginDir 'CozyMarblesVR.dll') -RspDir $tmp -Sources (Src 'Plugin') -References $refs -Defines $unity
+# menu artwork (drawn by make-icons.py), embedded as CozyMarblesVR.Icons.<name>.png
+$icons = Get-ChildItem (Join-Path $ModRoot 'src\Plugin\Icons') -Filter *.png | ForEach-Object { "`"$($_.FullName)`",CozyMarblesVR.Icons.$($_.Name)" }
+Invoke-Csc -Out (Join-Path $pluginDir 'CozyMarblesVR.dll') -RspDir $tmp -Sources (Src 'Plugin') -References $refs -Defines $unity -Resources $icons
 
 # 5) Native OpenXR runtime parts into the player's data folder
 $plugins = Join-Path $data 'Plugins\x86_64'
