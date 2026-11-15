@@ -235,7 +235,98 @@ def gauge_needle():
     save(img, "gauge_needle", n, n)
 
 
+# ---------------------------------------------------------------- UI pieces in the game's dialog style
+# (white shapes are tinted in the game; the header carries its own colours)
+
+def ui_round_rect():
+    # white rounded rectangle for 9-slicing (border 40 px), used for panels, pills and buttons
+    n = 128
+    img, d = canvas(n, n)
+    d.rounded_rectangle((0, 0, s(n) - 1, s(n) - 1), radius=s(36), fill=WHITE)
+    save(img, "ui_round_rect", n, n)
+
+
+def ui_header():
+    # yellow header band like the game's dialogs: sun rays, stars and dots in a darker yellow, rounded top corners
+    w, h = 1024, 128
+    img, d = canvas(w, h)
+    base, dark = (250, 196, 45, 255), (238, 168, 30, 255)
+    d.rounded_rectangle((0, 0, s(w) - 1, s(h) + s(60)), radius=s(36), fill=base)
+    import random
+    rnd = random.Random(7)
+    # big sun on the right with rays
+    cx, cy, r = s(880), s(52), s(26)
+    for i in range(16):
+        ang = math.radians(i * 22.5)
+        d.line((cx + math.cos(ang) * r * 1.3, cy + math.sin(ang) * r * 1.3, cx + math.cos(ang) * r * 2.3, cy + math.sin(ang) * r * 2.3), fill=dark, width=s(4))
+    d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=dark)
+    # little bursts, stars and dots spread over the band
+    def star(x, y, rr, col):
+        pts = []
+        for i in range(10):
+            ang = math.radians(-90 + i * 36)
+            rad = rr if i % 2 == 0 else rr * 0.45
+            pts.append((x + math.cos(ang) * rad, y + math.sin(ang) * rad))
+        d.polygon(pts, fill=col)
+    for i in range(14):
+        x, y = s(rnd.randint(20, 800)), s(rnd.randint(10, 118))
+        if rnd.random() < 0.45:
+            star(x, y, s(rnd.randint(7, 13)), dark)
+        else:
+            for k in range(8):
+                ang = math.radians(k * 45 + rnd.randint(0, 30))
+                rr = s(rnd.randint(8, 14))
+                d.line((x + math.cos(ang) * rr * 0.4, y + math.sin(ang) * rr * 0.4, x + math.cos(ang) * rr, y + math.sin(ang) * rr), fill=dark, width=s(3))
+    for i in range(40):
+        x, y, rr = s(rnd.randint(5, 1015)), s(rnd.randint(5, 123)), s(rnd.choice((2, 3, 4)))
+        d.ellipse((x - rr, y - rr, x + rr, y + rr), fill=dark)
+    save(img, "ui_header", w, h)
+
+
+def ui_arrow():
+    n = 64
+    img, d = canvas(n, n)
+    d.polygon([(s(20), s(12)), (s(50), s(32)), (s(20), s(52))], fill=WHITE)
+    save(img, "ui_arrow", n, n)
+
+
+def ui_check():
+    n = 64
+    img, d = canvas(n, n)
+    d.line((s(12), s(33), s(26), s(47), s(52), s(17)), fill=WHITE, width=s(9), joint="curve")
+    for (x, y) in ((s(12), s(33)), (s(52), s(17))):
+        d.ellipse((x - s(4.5), y - s(4.5), x + s(4.5), y + s(4.5)), fill=WHITE)
+    save(img, "ui_check", n, n)
+
+
+def ui_headset():
+    # VR goggles glyph (white)
+    n = 128
+    img, d = canvas(n, n)
+    d.rounded_rectangle((s(10), s(36), s(118), s(92)), radius=s(22), fill=WHITE)
+    d.ellipse((s(50), s(70), s(78), s(98)), fill=(0, 0, 0, 0))                # nose cut-out
+    d.rectangle((s(54), s(84), s(74), s(96)), fill=(0, 0, 0, 0))
+    d.rectangle((s(2), s(52), s(12), s(66)), fill=WHITE)                       # strap stubs
+    d.rectangle((s(116), s(52), s(126), s(66)), fill=WHITE)
+    save(img, "ui_headset", n, n)
+
+
+def ui_monitor():
+    n = 128
+    img, d = canvas(n, n)
+    d.rounded_rectangle((s(12), s(18), s(116), s(88)), radius=s(10), outline=WHITE, width=s(10))
+    d.rectangle((s(56), s(88), s(72), s(104)), fill=WHITE)
+    d.rounded_rectangle((s(36), s(102), s(92), s(112)), radius=s(5), fill=WHITE)
+    save(img, "ui_monitor", n, n)
+
+
 if __name__ == "__main__":
+    ui_round_rect()
+    ui_header()
+    ui_arrow()
+    ui_check()
+    ui_headset()
+    ui_monitor()
     gauge()
     gauge_needle()
     icon_marble(False)

@@ -32,6 +32,7 @@ namespace CozyMarblesVR
             public Action Click;
             public Func<string> Text;
             public TextMeshProUGUI Label;
+            public Color TextColor = Color.white;
         }
 
         readonly List<Element> _buttons = new List<Element>();
@@ -89,8 +90,13 @@ namespace CozyMarblesVR
             var rows = new List<Action<float>>();
             float y = 0f;
 
-            Text(_canvasRt, Loc.T("VR-Einstellungen", "VR settings"), new Vector2(0f, y - 40f), new Vector2(W - 80f, 50f), 34f, TextAlignmentOptions.Center, font, FontStyles.Bold);
-            y -= 80f;
+            var header = NewRect("Header", _canvasRt, new Vector2(0f, 0f), new Vector2(W, HeaderH), new Vector2(0.5f, 1f));
+            var hImg = header.gameObject.AddComponent<Image>();
+            hImg.sprite = UiSprite("ui_header", false);
+            hImg.raycastTarget = false;
+            Text(_canvasRt, Loc.T("VR-Einstellungen", "VR settings"), new Vector2(3f, -HeaderH * 0.5f - 4f), new Vector2(W - 70f, HeaderH), 44f, TextAlignmentOptions.Left, font, FontStyles.Bold).color = TitleShadow;
+            Text(_canvasRt, Loc.T("VR-Einstellungen", "VR settings"), new Vector2(0f, -HeaderH * 0.5f), new Vector2(W - 70f, HeaderH), 44f, TextAlignmentOptions.Left, font, FontStyles.Bold);
+            y -= HeaderH + 14f;
 
             y = Header(Loc.T("Hauptmenü", "Main menu"), y, font);
             y = Stepper(Loc.T("Größe", "Size"), y, font, () => $"{c.MenuWidth.Value:0.0} m", () => c.MenuWidth.Value = Mathf.Clamp(Round(c.MenuWidth.Value - 0.1f), 0.4f, 5f), () => c.MenuWidth.Value = Mathf.Clamp(Round(c.MenuWidth.Value + 0.1f), 0.4f, 5f));
@@ -140,8 +146,20 @@ namespace CozyMarblesVR
             // background behind everything
             var bg = NewRect("Background", _canvasRt, new Vector2(0f, 0f), new Vector2(W, bgHeight), new Vector2(0.5f, 1f));
             var bgImg = bg.gameObject.AddComponent<Image>();
-            bgImg.color = new Color(0.13f, 0.1f, 0.17f, 0.94f);
+            bgImg.sprite = UiSprite("ui_round_rect", true);
+            bgImg.type = Image.Type.Sliced;
+            bgImg.pixelsPerUnitMultiplier = 1.4f;
+            bgImg.color = Cream;
+            bgImg.raycastTarget = false;
             bg.SetAsFirstSibling();
+            var shadow = NewRect("Shadow", _canvasRt, new Vector2(8f, -10f), new Vector2(W, bgHeight), new Vector2(0.5f, 1f));
+            var sImg = shadow.gameObject.AddComponent<Image>();
+            sImg.sprite = bgImg.sprite;
+            sImg.type = Image.Type.Sliced;
+            sImg.pixelsPerUnitMultiplier = 1.4f;
+            sImg.color = new Color(0.1f, 0.05f, 0f, 0.35f);
+            sImg.raycastTarget = false;
+            shadow.SetAsFirstSibling();
         }
 
         static float Round(float v) => Mathf.Round(v * 10f) / 10f;
@@ -174,36 +192,70 @@ namespace CozyMarblesVR
             return t;
         }
 
-        Element Button(string label, Vector2 pos, Vector2 size, TMP_FontAsset font, Action click, Color color)
+        Element Button(string label, Vector2 pos, Vector2 size, TMP_FontAsset font, Action click, Color color, Color? textColor = null)
         {
             var rt = NewRect("Button", _canvasRt, pos, size, new Vector2(0.5f, 0.5f));
             var img = rt.gameObject.AddComponent<Image>();
+            img.sprite = UiSprite("ui_round_rect", true);
+            img.type = Image.Type.Sliced;
+            img.pixelsPerUnitMultiplier = 2.6f;   // small corner radius on small buttons
             img.color = color;
             img.raycastTarget = false;
-            var t = Text(rt, label, Vector2.zero, size, 28f, TextAlignmentOptions.Center, font);
+            var t = Text(rt, label, Vector2.zero, size, 26f, TextAlignmentOptions.Center, font, FontStyles.Bold);
             var rtT = t.rectTransform;
             rtT.anchorMin = rtT.anchorMax = new Vector2(0.5f, 0.5f);
             rtT.anchoredPosition = Vector2.zero;
-            var e = new Element { Rt = rt, Img = img, Color = color, Click = click, Label = t };
+            var e = new Element { Rt = rt, Img = img, Color = color, Click = click, Label = t, TextColor = textColor ?? Color.white };
+            t.color = e.TextColor;
             _buttons.Add(e);
             return e;
         }
 
-        static readonly Color ButtonColor = new Color(0.32f, 0.27f, 0.42f, 1f);
-        static readonly Color AccentColor = new Color(0.3f, 0.55f, 0.95f, 1f);
+        // colours of the game's own dialogs
+        static readonly Color Cream = new Color32(238, 233, 221, 255);
+        static readonly Color Brown = new Color32(92, 58, 46, 255);
+        static readonly Color TitleShadow = new Color32(150, 80, 30, 255);
+        static readonly Color Teal = new Color32(62, 127, 124, 255);
+        static readonly Color FieldBrown = new Color32(174, 130, 107, 255);
+        static readonly Color Yellow = new Color32(250, 196, 45, 255);
+        static readonly Color ButtonColor = Teal;
+        const float HeaderH = 90f;
+
+        static readonly Dictionary<string, Sprite> Sprites = new Dictionary<string, Sprite>();
+
+        /// <summary>Sprite from the mod's artwork; sliced = 40 px corners for 9-slicing.</summary>
+        internal static Sprite UiSprite(string icon, bool sliced)
+        {
+            string key = icon + (sliced ? "#9" : "");
+            if (Sprites.TryGetValue(key, out var s) && s != null) return s;
+            var tex = Icons.Get(icon);
+            if (tex == null) return null;
+            s = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect,
+                sliced ? new Vector4(40f, 40f, 40f, 40f) : Vector4.zero);
+            Sprites[key] = s;
+            return s;
+        }
 
         float Header(string text, float y, TMP_FontAsset font)
         {
-            Text(_canvasRt, text, new Vector2(0f, y - 22f), new Vector2(W - 80f, 40f), 26f, TextAlignmentOptions.Left, font, FontStyles.Bold).color = new Color(1f, 0.82f, 0.35f, 1f);
-            return y - 46f;
+            Text(_canvasRt, text, new Vector2(0f, y - 24f), new Vector2(W - 80f, 40f), 28f, TextAlignmentOptions.Left, font, FontStyles.Bold).color = Brown;
+            return y - 48f;
         }
 
         float Stepper(string label, float y, TMP_FontAsset font, Func<string> value, Action minus, Action plus)
         {
             float cy = y - RowH * 0.5f;
-            Text(_canvasRt, label, new Vector2(-W * 0.5f + 40f + 150f, cy), new Vector2(300f, RowH), 24f, TextAlignmentOptions.Left, font);
+            Text(_canvasRt, label, new Vector2(-W * 0.5f + 40f + 150f, cy), new Vector2(300f, RowH), 24f, TextAlignmentOptions.Left, font, FontStyles.Bold).color = Brown;
             Button("−", new Vector2(110f, cy), new Vector2(52f, 46f), font, minus, ButtonColor);
-            var v = Text(_canvasRt, "", new Vector2(190f, cy), new Vector2(100f, RowH), 24f, TextAlignmentOptions.Center, font);
+            var field = NewRect("Field", _canvasRt, new Vector2(190f, cy), new Vector2(100f, 46f), new Vector2(0.5f, 0.5f));
+            var fImg = field.gameObject.AddComponent<Image>();
+            fImg.sprite = UiSprite("ui_round_rect", true);
+            fImg.type = Image.Type.Sliced;
+            fImg.pixelsPerUnitMultiplier = 2.6f;
+            fImg.color = FieldBrown;
+            fImg.raycastTarget = false;
+            var v = Text(_canvasRt, "", new Vector2(190f, cy), new Vector2(100f, RowH), 22f, TextAlignmentOptions.Center, font, FontStyles.Bold);
+            v.enableAutoSizing = true; v.fontSizeMax = 22f; v.fontSizeMin = 14f;
             _values.Add(new Element { Label = v, Text = value });
             Button("+", new Vector2(270f, cy), new Vector2(52f, 46f), font, plus, ButtonColor);
             return y - RowH;
@@ -212,8 +264,8 @@ namespace CozyMarblesVR
         float Toggle(string label, float y, TMP_FontAsset font, Func<string> value, Action toggle)
         {
             float cy = y - RowH * 0.5f;
-            Text(_canvasRt, label, new Vector2(-W * 0.5f + 40f + 150f, cy), new Vector2(300f, RowH), 24f, TextAlignmentOptions.Left, font);
-            var b = Button("", new Vector2(190f, cy), new Vector2(212f, 46f), font, toggle, ButtonColor);
+            Text(_canvasRt, label, new Vector2(-W * 0.5f + 40f + 150f, cy), new Vector2(300f, RowH), 24f, TextAlignmentOptions.Left, font, FontStyles.Bold).color = Brown;
+            var b = Button("", new Vector2(190f, cy), new Vector2(212f, 46f), font, toggle, FieldBrown);
             _values.Add(new Element { Label = b.Label, Text = value });
             return y - RowH;
         }
@@ -221,7 +273,7 @@ namespace CozyMarblesVR
         float Wide(string label, float y, TMP_FontAsset font, Action click, bool accent = false)
         {
             float cy = y - RowH * 0.5f;
-            Button(label, new Vector2(0f, cy), new Vector2(W - 80f, 46f), font, click, accent ? AccentColor : ButtonColor);
+            Button(label, new Vector2(0f, cy), new Vector2(W - 80f, 46f), font, click, accent ? Yellow : ButtonColor, accent ? Brown : (Color?)null);
             return y - RowH;
         }
 
@@ -323,8 +375,12 @@ namespace CozyMarblesVR
         {
             if (!_open) return;
             foreach (var v in _values) v.Label.text = v.Text();
-            foreach (var b in _buttons) b.Img.color = b == _hover ? new Color(1f, 0.82f, 0.35f, 1f) : b.Color;
-            foreach (var b in _buttons) b.Label.color = b == _hover ? new Color(0.15f, 0.1f, 0.2f, 1f) : Color.white;
+            foreach (var b in _buttons)
+            {
+                b.Img.color = b == _hover ? Color.Lerp(b.Color, Color.white, 0.3f) : b.Color;
+                b.Label.color = b.TextColor;
+                b.Rt.localScale = b == _hover ? new Vector3(1.04f, 1.04f, 1f) : Vector3.one;
+            }
             if (_handleImg != null) _handleImg.color = (_handleHover || _dragging) ? new Color(1f, 0.86f, 0.5f, 1f) : Color.white;
         }
 

@@ -155,6 +155,11 @@ Undo anything you place. The game language follows the maintainer's setting (cur
 - In simulation the aim pose equals the grip pose, so the grab ball and throw cone sit inside the controller model –
   use `aimfwd 0.12` before judging their visibility.
 - World scale 8: a marble or pin is only a few pixels from head distance; use `handshot … m`/`… b` or the `dump` numbers.
+- The start window (`StartDialog`) is a uGUI overlay in the game's dialog style (sprites `ui_*` from `make-icons.py`,
+  game font). The game's input modules are paused while it is open, so it hit-tests the real mouse itself. Test it
+  with `[General] ShowStartDialog = true`, `shot`, and real mouse input via `user32` (`SetProcessDPIAware`,
+  `SetCursorPos`, `mouse_event`) – Windows display scaling applies. Ticking "do not show again" in a test saves
+  `ShowStartDialog = false` (restore the config afterwards); `start vr|monitor` confirms it without a mouse.
 - `handshot` cameras look from a fixed yaw; billboards that face the head (speed dial) appear mirrored from behind.
 - The game removes marbles outside the level bounds after 15 s (`MarbleDestroyer` trigger zones) – drop test marbles
   near the middle of the board, and do not mistake that for a mod bug.
