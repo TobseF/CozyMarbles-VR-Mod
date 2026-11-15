@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using TimR.Cam;
 using UnityEngine;
@@ -29,6 +30,8 @@ namespace CozyMarblesVR
 
         LineRenderer _laser;
         Transform _reticle, _tipBall, _handL, _handR;
+        MarbleLauncher _launcher;
+        static readonly Color MarbleBallColor = new Color(0.35f, 0.65f, 1f, 0.95f); // marble mode: the ball turns blue
         bool _lastGrabMode;
         float _grabPulse;
         Material _laserMat, _reticleMat, _handMat, _ballMat;
@@ -59,6 +62,7 @@ namespace CozyMarblesVR
         VRHelpPanel _help;
         public HudPanel Hud => _hud;
         public VRInput VrInput => _input;
+        public MarbleLauncher Launcher => _launcher;
         public VRSettingsPanel Settings => _settings;
         public VRHelpPanel Help => _help;
         public Tracking Tracked => _tracking;
@@ -142,6 +146,7 @@ namespace CozyMarblesVR
             _reticle = Primitive("CozyVR Reticle", PrimitiveType.Sphere, _reticleMat);
             _ballMat = ColorMaterial(new Color(1f, 1f, 1f, 0.9f));
             _tipBall = Primitive("CozyVR Grab Ball", PrimitiveType.Sphere, _ballMat);
+            _launcher = new MarbleLauncher(_rig);
             _handL = Primitive("CozyVR Hand L", PrimitiveType.Cube, _handMat);
             _handR = Primitive("CozyVR Hand R", PrimitiveType.Cube, _handMat);
             _handL.localScale = _handR.localScale = new Vector3(0.03f, 0.03f, 0.09f);
@@ -297,6 +302,7 @@ namespace CozyMarblesVR
             }
             _gameCam = null;
             if (_laser != null) _laser.enabled = false;
+            _launcher?.Hide();
             foreach (var t in new[] { _reticle, _tipBall, _handL, _handR })
                 if (t != null) t.gameObject.SetActive(false);
             Plugin.Log.LogInfo("VR inactive, back to the monitor.");
@@ -324,7 +330,20 @@ namespace CozyMarblesVR
         }
 
         /// <summary>The button next to the version number.</summary>
-        public void ToggleMode()
+/// <summary>Opens (or closes) the VR settings next to the main menu panel, e.g. from the game's main menu.</summary>
+        public void ToggleSettingsAtMainMenu()
+        {
+            if (!_active) return;
+            if (_settings.Open) { _settings.Close(); return; }
+            // the main menu panel is wide: open right in front of the viewer, a little to the right of the menu buttons
+            Vector3 head = _tracking.HeadPos;
+            Vector3 f = _tracking.HeadRot * Vector3.forward; f.y = 0f;
+            f = f.sqrMagnitude > 1e-4f ? f.normalized : Vector3.forward;
+            Vector3 right = Vector3.Cross(Vector3.up, f);
+            _settings.ShowAt(head + f * 1.1f + right * 0.25f - Vector3.up * 0.1f, head);
+        }
+
+                public void ToggleMode()
         {
             if (_userFlat) SetFlat(false);
             else SetFlat(true);
@@ -394,6 +413,12 @@ namespace CozyMarblesVR
                 var data = cam.GetUniversalAdditionalCameraData();
                 if (data != null && data.allowXRRendering) data.allowXRRendering = false;
             }
+        }
+
+        /// <summary>The waiting marble of marble mode moves with the physics step (so it can push other marbles).</summary>
+        void FixedUpdate()
+        {
+            if (_active) _launcher?.FixedTick();
         }
 
         void Update()
@@ -599,6 +624,7 @@ namespace CozyMarblesVR
             bool show = _active && _input.PointerValid;
             bool grabMode = show && _input.Grab.Active && !_input.NavActive;
             bool grab = grabMode && !_input.OverUi;
+            bool marbles = grabMode && _input.Grab.MarbleActive;
             bool showLaser = show && !_input.NavActive && !grab;
             if (_laser.enabled != showLaser) _laser.enabled = showLaser;
             if (_reticle.gameObject.activeSelf != show) _reticle.gameObject.SetActive(show);
@@ -632,7 +658,21 @@ namespace CozyMarblesVR
                 _reticle.localScale = Vector3.one * (size / _scale);
                 Color rc = _input.OverUi ? new Color(1f, 0.85f, 0.3f, 1f) : new Color(1f, 1f, 1f, 0.95f);
                 if (grab) rc = _input.Grab.Holding ? new Color(1f, 0.55f, 0.1f, 1f) : _input.Grab.Touching ? new Color(1f, 0.85f, 0.3f, 1f) : new Color(1f, 1f, 1f, 0.9f);
+                if (grab && marbles) rc = MarbleBallColor;
                 _reticleMat.color = rc;
+            }
+            _ballMat.color = marbles ? MarbleBallColor : new Color(1f, 1f, 1f, 0.9f);
+
+            // marble mode: the next marble waits at the tip (with direction cone and speed dial) instead of the ball
+            bool launcher = marbles && !Game.InMenu && !Game.Placing;
+            Vector3 aim = _input.Grab.TipDir.sqrMagnitude > 1e-6f ? _input.Grab.TipDir.normalized : _rig.forward;
+            bool rightPointer = Plugin.Cfg.PointerHand.Value == Hand.Right;
+            var pointerHand = rightPointer ? _tracking.Right : _tracking.Left;
+            _launcher.Tick(launcher, _input.Grab.Tip, aim, _vrCam.transform.position, rightPointer ? _handR : _handL, _rig.rotation * pointerHand.GripRot);
+            if (_launcher.Radius > 0f)
+            {
+                if (grab && _reticle.gameObject.activeSelf) _reticle.gameObject.SetActive(false);
+                if (_tipBall.gameObject.activeSelf) _tipBall.gameObject.SetActive(false);
             }
             SetHand(_handL, _tracking.Left);
             SetHand(_handR, _tracking.Right);
@@ -700,6 +740,7 @@ namespace CozyMarblesVR
             return $"rig: pos={_rig.position} rot={_rig.eulerAngles} scale={_scale:F2} anchor={_anchor} yawOffset={_yawOffset:F1} head(local)={_tracking.HeadPos}/{_tracking.HeadRot.eulerAngles} headValid={_tracking.HeadValid} sim={_tracking.Simulated}\n" +
                    $"hands: L valid={_tracking.Left.Valid} pos={_tracking.Left.GripPos} | R valid={_tracking.Right.Valid} pos={_tracking.Right.GripPos} aimRot={_tracking.Right.AimRot.eulerAngles} trig={_tracking.Right.Trigger:F2}\n" +
                    $"handR obj: active={_handR.gameObject.activeSelf} model={_handModels} pos={_handR.position} scale={_handR.lossyScale} shader={_handR.GetComponent<MeshRenderer>().sharedMaterial.shader.name} bounds={_handR.GetComponent<MeshRenderer>().bounds.size} layer={_handR.gameObject.layer}\n" +
+                   _launcher.DebugState() + "\n" +
                    $"ball: active={_tipBall.gameObject.activeInHierarchy} pos={_tipBall.position} scale={_tipBall.lossyScale}\n" +
                    $"input: pointerValid={_input.PointerValid} overUi={_input.OverUi} reticle={_input.ReticleWorld} origin={_input.AimOriginWorld} locomotion={LocomotionActive} gameCam={(_gameCam ? _gameCam.transform.position.ToString() : "-")}\n" +
                    _hud.DebugState() + "\n" +
@@ -719,19 +760,33 @@ namespace CozyMarblesVR
 
         public void DebugHandShot(string path, string which, float yaw, float pitch)
         {
-            var h = which == "b" ? _tipBall : which == "l" ? _handL : _handR;
-            if (h == null || !h.gameObject.activeSelf) return;
+            // b = ball at the controller tip, m = newest marble (whole scene), l / r = hands
+            Vector3 center;
+            bool scene = which == "m" || which == "b";
+            if (which == "b") center = _input.Grab.Tip;
+            else if (scene)
+            {
+                var all = TimR.Marbles.MarbleManager._ != null ? TimR.Marbles.MarbleManager._.GetAllCurrentMarbles() : null;
+                if (all == null || all.Length == 0) return;
+                center = all[all.Length - 1].Position;
+            }
+            else
+            {
+                var h = which == "l" ? _handL : _handR;
+                if (h == null || !h.gameObject.activeSelf) return;
+                center = h.position;
+            }
             var rt = new RenderTexture(900, 900, 24, RenderTextureFormat.ARGB32);
             var go = new GameObject("CozyVR Hand Capture");
             var cam = go.AddComponent<Camera>();
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0.25f, 0.3f, 0.4f, 1f);
-            cam.cullingMask = 1 << HudPanel.HudLayer;
+            cam.cullingMask = scene ? ~0 : 1 << HudPanel.HudLayer;
             cam.fieldOfView = 40f;
             cam.nearClipPlane = 0.01f;
             cam.targetTexture = rt;
             Quaternion look = Quaternion.Euler(pitch, yaw, 0f);
-            go.transform.SetPositionAndRotation(h.position - look * Vector3.forward * (0.35f * _scale), look);
+            go.transform.SetPositionAndRotation(center - look * Vector3.forward * (0.35f * _scale), look);
             var data = cam.GetUniversalAdditionalCameraData();
             data.allowXRRendering = false;
             data.renderPostProcessing = false;

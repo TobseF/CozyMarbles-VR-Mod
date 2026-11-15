@@ -184,6 +184,7 @@ namespace CozyMarblesVR
                 }
                 else Right.AimRot = HeadRot * Quaternion.Euler(SimOverride.AimPitch, SimOverride.AimYaw, 0f);
                 Right.GripRot = Right.AimRot;
+                Right.AimPos += Right.AimRot * new Vector3(0f, 0f, SimOverride.AimForward); // real controllers aim from their front
                 Right.Trigger = SimOverride.Button("trigger") ? 1f : 0f;
                 Right.Grip = SimOverride.Button("grip") ? 1f : 0f;
                 Right.Primary = SimOverride.Button("a");

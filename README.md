@@ -115,6 +115,13 @@ The **mouse/hand toggle** in the left-hand menu switches modes (the ball appears
   turn it in 90° steps. The height follows your hand. **Release** to set it down where the transparent preview shows.
   New pieces from the build menu hang on your hand in the same way and are placed with a trigger press.
   Decorations are not bound to the grid: with the **magnet** off they land exactly on the surface below the ball.
+- **Marbles:** the round **marble button** next to the mouse/hand toggle turns on marble mode (it also switches to
+  hand mode). The next marble waits at the tip of the controller; every **trigger press** lets it go and the next one
+  appears. **L1** (bumper of the other hand) throws faster, a short tap on **L2** (its trigger) slower – levels 0 to 6,
+  at 0 the marble just drops. Holding L2 still brings up the build menu as usual. A small orange cone in front of the
+  marble shows the direction (straight down when dropping) and a little dial on top of the controller shows the level. With **marble physics** on (VR settings, Marbles
+  section) the waiting marble is solid and pushes other marbles; off, it is a see-through preview. Pointing at a menu,
+  the trigger still clicks the menu. Marbles that leave the play area are removed by the game after 15 seconds.
 - **Mouse:** the game's original building on the grid, with the laser as your mouse pointer. In menus the laser
   appears automatically in both modes.
 
@@ -122,7 +129,7 @@ The **mouse/hand toggle** in the left-hand menu switches modes (the ball appears
 
 - **Main menu** (also pause and dialogs): floats fixed in the room and always stays in front of the game objects.
 - **Left-hand menu:** the game's toolbar (undo/redo, play, delete, race, reset camera) in one row above the build
-  menu, followed by the **mouse/hand toggle**. Left of the build menu sits the round menu button with **VR settings**
+  menu, followed by the **mouse/hand toggle** and the **marble button**. Left of the build menu sits the round menu button with **VR settings**
   (gear) and the **manual** (VR controls for your current button layout) below it.
   Tap the left trigger to open or close the toolbar, hold it to carry the whole menu on your hand, and release it to
   leave the menu where it is.
@@ -130,8 +137,10 @@ The **mouse/hand toggle** in the left-hand menu switches modes (the ball appears
   towards you.
 - **Labels on objects** (marble names, starter and checkpoint info, portal links, selection box) appear right in
   front of their object, and you can press their buttons with the laser.
+- **VR settings** can also be opened from the game's main menu (entry "VR settings" below "Play on monitor").
 - Every free-standing window has a small bar underneath: grab the **bar** to move it (right stick = further/closer),
-  drag the round **resize** button at the corner to resize it, and press the **gear** for the VR settings. Everything is saved.
+  drag the round **resize** button at the corner to resize it, and press the **gear** for the VR settings. The VR settings open turned towards you and have the same grip
+  bar to move them. Everything is saved.
 
 ---
 

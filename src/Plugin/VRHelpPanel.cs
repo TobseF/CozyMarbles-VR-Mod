@@ -111,6 +111,7 @@ namespace CozyMarblesVR
                 Loc.T("Fenster verschieben: Leiste unter dem Fenster greifen (rechter Stick ↑↓: näher / weiter weg). Ecke unten rechts: Größe.", "Move windows: grab the bar below the window (right stick ↑↓: closer / farther). Bottom right corner: size."),
                 Loc.T("Greifmodus (Knopf „Maus/Hand“ im linken Menü oder linken Bumper zweimal antippen): Kugel am Controller statt Laser.", "Grab mode (button “Mouse/Hand” in the left menu, or double-tap the left bumper): a ball on the controller instead of the laser."),
                 Loc.T("Trigger halten = Teil greifen und frei bewegen, Controller drehen = Teil drehen, loslassen = einrasten (Vorschau zeigt wohin).", "Hold trigger = grab and move a piece freely, twist controller = rotate it, release = snap in (preview shows where)."),
+                Loc.T("Murmel-Knopf im linken Menü: die nächste Murmel wartet am Controller, Trigger = loslassen bzw. werfen. L1 = schneller, L2 kurz = langsamer werfen (Stufe 0–6 auf dem Controller), L2 halten = Bau-Menü.", "Marble button in the left menu: the next marble waits on the controller, trigger = drop or throw it. L1 = throw faster, L2 tap = slower (level 0–6 shown on the controller), hold L2 = build menu."),
                 Loc.T("Knopf „VR“ neben der Menüleiste: VR-Einstellungen (Größen, Abstände, Bau-Fenster an der Hand).", "Button “VR” next to the menu bar: VR settings (sizes, distances, build window on the hand)."),
             };
             foreach (var n in notes)

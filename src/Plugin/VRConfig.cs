@@ -47,6 +47,9 @@ namespace CozyMarblesVR
         public readonly ConfigEntry<float> GrabHoldSeconds;
         public readonly ConfigEntry<BumperChoice> GrabToggleBumper;
         public readonly ConfigEntry<bool> GrabGhost;
+        public readonly ConfigEntry<bool> MarbleMode;
+        public readonly ConfigEntry<int> ThrowLevel;
+        public readonly ConfigEntry<bool> MarblePhysics;
         public readonly ConfigEntry<bool> FollowCameraYaw;
         public readonly ConfigEntry<bool> DesktopInput;
 
@@ -179,6 +182,9 @@ namespace CozyMarblesVR
             GrabHoldSeconds = cfg.Bind("Grab", "HoldSeconds", 0.12f, new ConfigDescription("How long the trigger is held on a piece before it is picked up.", new AcceptableValueRange<float>(0.0f, 1f)));
             GrabToggleBumper = cfg.Bind("Grab", "ToggleBumper", BumperChoice.Left, "Double-tap this bumper to switch between pointer and grab mode (Left = Shift key bumper, Right = roll marbles bumper).");
             GrabGhost = cfg.Bind("Grab", "ShowGhost", true, "Show a transparent preview of where the carried piece will snap.");
+            MarbleMode = cfg.Bind("Grab", "MarbleMode", false, "Marble mode (hand mode only): the trigger drops a marble at the ball on the controller instead of grabbing pieces. Toggle with the marble button in the left-hand menu.");
+            ThrowLevel = cfg.Bind("Grab", "ThrowLevel", 0, new ConfigDescription("Marble mode: 0 = the marble just drops, 1..6 = it is thrown in the pointing direction, 6 being the fastest (3 m/s real size). A small cone on the marble shows the direction, a dial on the controller the level. L1 / L2 change it.", new AcceptableValueRange<int>(0, 6)));
+            MarblePhysics = cfg.Bind("Grab", "MarblePhysics", true, "Marble mode: the marble waiting on the controller is solid and pushes other marbles. Off = a see-through preview that touches nothing.");
             MenuNavigation = cfg.Bind("Controls", "MenuNavigation", true, "In menus (main menu, pause): move a focus cursor with the D-pad or the off-hand stick, select with A, go back with B. The laser keeps working.");
 
             const string f = "Controls.Buttons.SteamFrame";

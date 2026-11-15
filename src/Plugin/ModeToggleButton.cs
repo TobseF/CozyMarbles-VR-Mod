@@ -254,6 +254,56 @@ namespace CozyMarblesVR
             }
             string text = MenuText(manager.Mode);
             if (text != _menuLast) { _menuLast = text; _menuText.text = text; }
+
+            // "VR settings" right below, only while the game is really shown in the headset
+            if (_settingsEntry == null) BuildSettingsEntry();
+            if (_settingsEntry != null)
+            {
+                bool show = manager.Mode == VRManager.ModeState.VR;
+                if (_settingsEntry.activeSelf != show) _settingsEntry.SetActive(show);
+                string st = Loc.T("VR-Einstellungen", "VR settings");
+                if (st != _vrSetLast) { _vrSetLast = st; _vrSetText.text = st; }
+            }
+        }
+
+        GameObject _settingsEntry;
+        TextMeshProUGUI _vrSetText;
+        string _vrSetLast;
+
+        /// <summary>Second clone of the credits button: opens the mod's VR settings next to the main menu.</summary>
+        void BuildSettingsEntry()
+        {
+            if (_menuEntry == null) return;
+            var clone = UnityEngine.Object.Instantiate(_menuEntry, _menuEntry.transform.parent);
+            clone.name = "btn vr settings";
+            clone.transform.SetSiblingIndex(_menuEntry.transform.GetSiblingIndex() + 1);
+            var btn = clone.GetComponent<Button>();
+            btn.onClick.RemoveAllListeners();
+            btn.onClick.AddListener(() => VRManager.Instance?.ToggleSettingsAtMainMenu());
+            _vrSetText = null;
+            foreach (var t in clone.GetComponentsInChildren<TextMeshProUGUI>(true))
+            {
+                if (t.gameObject.name == "vr icon text") { UnityEngine.Object.Destroy(t.gameObject); continue; }
+                if (_vrSetText == null) _vrSetText = t;
+            }
+            // the mod's gear-with-sunglasses icon in place of the original icon
+            foreach (var tr in clone.GetComponentsInChildren<Transform>(true))
+            {
+                if (tr.name != "img_icon") continue;
+                var img = tr.GetComponent<Image>();
+                var tex = Icons.Get("btn_vr");
+                if (img != null && tex != null)
+                {
+                    img.sprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+                    img.color = Color.white;
+                    img.preserveAspect = true;
+                }
+                tr.gameObject.SetActive(true);
+                break;
+            }
+            if (_vrSetText == null) { UnityEngine.Object.Destroy(clone); return; }
+            _settingsEntry = clone;
+            _vrSetLast = null;
         }
 
         void BuildMenuEntry()

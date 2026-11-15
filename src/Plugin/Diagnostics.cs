@@ -23,6 +23,7 @@ namespace CozyMarblesVR
         public static readonly Dictionary<string, bool> Buttons = new Dictionary<string, bool>();
         public static Vector2 LeftStick, RightStick;
         public static Vector3 LeftHandOffset, RightHandOffset;
+        public static float AimForward;
 
         public static bool Button(string name) => Buttons.TryGetValue(name, out bool b) && b;
     }
@@ -95,6 +96,12 @@ namespace CozyMarblesVR
                 case "eyeshot": _manager.DebugCaptureEye(Path.Combine(OutDir, a[1] + ".png")); break;
                 case "handshot": _manager.DebugHandShot(Path.Combine(OutDir, a[1] + ".png"), a[2], F(a[3]), F(a[4])); break;
                 case "grab": Plugin.Cfg.GrabMode.Value = a[1] == "on"; break;
+                case "marble": Plugin.Cfg.MarbleMode.Value = a[1] == "on"; break;
+                case "aimfwd": SimOverride.AimForward = F(a[1]); break;
+                case "lockmouse": TimR.InputStuff.InputManager._?.SetMouseLocked(true); break;
+                case "physics": Plugin.Cfg.MarblePhysics.Value = a[1] == "on"; break;
+                case "throw": Plugin.Cfg.ThrowLevel.Value = int.Parse(a[1]); break;
+                case "aimsethandle": SimOverride.Enabled = true; SimOverride.HasAimWorld = true; SimOverride.AimWorld = _manager.Settings.DebugHandlePoint(); break;
                 case "handabove": _manager.DebugHandAbove(new Vector3(F(a[1]), F(a[2]), F(a[3])), F(a[4])); break;
                 case "dump": Dump(); break;
                 case "sim": SimOverride.Enabled = a[1] == "on"; break;
@@ -239,8 +246,12 @@ namespace CozyMarblesVR
                 sb.AppendLine($"raycast at {ped.position}: " + string.Join(" | ", names));
             }
             sb.AppendLine($"grab: active={_manager.VrInput.Grab.Active} touching={_manager.VrInput.Grab.Touching} holding={_manager.VrInput.Grab.Holding} tip={_manager.VrInput.Grab.Tip}");
-            sb.AppendLine($"game: placing={Game.Placing} plane={(Game.TryGetPlacementPlane(out float h) ? h.ToString("F2") : "-")} mode={(TimR.MainMenu.GameModeManager._ != null ? TimR.MainMenu.GameModeManager._.Mode.Value.ToString() : "?")}");
+            sb.AppendLine($"game: mouseLocked={(TimR.InputStuff.InputManager._ != null && TimR.InputStuff.InputManager._.MouseLocked)} placing={Game.Placing} plane={(Game.TryGetPlacementPlane(out float h) ? h.ToString("F2") : "-")} mode={(TimR.MainMenu.GameModeManager._ != null ? TimR.MainMenu.GameModeManager._.Mode.Value.ToString() : "?")}");
             sb.AppendLine(Game.DebugDeco());
+            var marbles = TimR.Marbles.MarbleManager._ != null ? TimR.Marbles.MarbleManager._.GetAllCurrentMarbles() : new TimR.Marbles.Marble[0];
+            for (int i = Math.Max(0, marbles.Length - 3); i < marbles.Length; i++)
+                if (marbles[i] != null) sb.AppendLine($"marble[{i}]: pos={marbles[i].Position} vel={marbles[i].Rigidbody.linearVelocity} kinematic={marbles[i].Rigidbody.isKinematic}");
+            sb.AppendLine($"marbles: count={(TimR.Marbles.MarbleManager._ != null ? TimR.Marbles.MarbleManager._.CurrentNumberOfMarbles : -1)} mode={_manager.VrInput.Grab.MarbleActive} throw={Plugin.Cfg.ThrowLevel.Value} settingsOpen={_manager.Settings.Open} handle={_manager.Settings.DebugHandlePoint()} settings: {_manager.Settings.DebugState()}");
             Plugin.Log.LogInfo(sb.ToString());
         }
     }

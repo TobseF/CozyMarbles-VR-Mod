@@ -38,7 +38,7 @@ namespace CozyMarblesVR
         const int AtlasSlots = 4;
 
         public enum Placement { Menu, GameHud, BuildFree, BuildAttached, Options, Overlay, Hidden }
-        public enum Widget { None, Bar, Corner, Settings, Info, Grab }
+        public enum Widget { None, Bar, Corner, Settings, Info, Grab, Marble }
         enum Drag { None, Move, Scale }
 
         // ---------------------------------------------------------------- one floating panel
@@ -216,7 +216,7 @@ namespace CozyMarblesVR
         readonly Transform _rig;
         readonly PanelView _main, _build, _options, _overlay;
         readonly List<Tile> _tiles = new List<Tile>();
-        readonly MiniButton _miniInfo, _miniVr, _miniGrab;
+        readonly MiniButton _miniInfo, _miniVr, _miniGrab, _miniMarble;
         MiniButton _hoverMini;
         RenderTexture _mainRt, _atlasRt, _overlayRt;
 
@@ -280,6 +280,9 @@ namespace CozyMarblesVR
         public float PanelWidth => Focus.WidthM;
         public float PanelHeight => Focus.HeightM;
 
+        /// <summary>Makes the main menu / HUD panel the one the VR settings open next to.</summary>
+        public void FocusMain() { _focus = _main; }
+
         static int TextureWidth => Mathf.Clamp(Plugin.Cfg.UiResolution.Value, 1280, 3840);
         static int TextureHeight => TextureWidth * 9 / 16;
 
@@ -297,14 +300,18 @@ namespace CozyMarblesVR
             _miniInfo = new MiniButton("CozyVR Info Button", "btn_manual", rig);
             _miniVr = new MiniButton("CozyVR VR Button", "btn_vr", rig);
             _miniGrab = new MiniButton("CozyVR Grab Button", "toggle_mouse", rig) { Aspect = 2f };
+            _miniMarble = new MiniButton("CozyVR Marble Button", "btn_marble", rig);
         }
 
         /// <summary>Shows the current mode on the toggle: knob left on the mouse pointer, or right on the hand.</summary>
         public void SetGrabLabel(bool grab) => _miniGrab.SetIcon(grab ? "toggle_hand" : "toggle_mouse");
 
+        /// <summary>Marble button: lit while marble mode is on.</summary>
+        public void SetMarbleLabel(bool on) => _miniMarble.SetIcon(on ? "btn_marble_on" : "btn_marble");
+
         static Mesh _quadMesh;
 
-        static Transform MakeQuad(string name, Material mat, Transform parent)
+        internal static Transform MakeQuad(string name, Material mat, Transform parent)
         {
             if (_quadMesh == null)
             {
@@ -463,6 +470,7 @@ namespace CozyMarblesVR
             _miniInfo.Place(false, default, Quaternion.identity, 0f);
             _miniVr.Place(false, default, Quaternion.identity, 0f);
             _miniGrab.Place(false, default, Quaternion.identity, 0f);
+            _miniMarble.Place(false, default, Quaternion.identity, 0f);
 
             if (_uiCam != null)
             {
@@ -815,6 +823,7 @@ namespace CozyMarblesVR
                 _miniInfo.Place(false, default, Quaternion.identity, 0f);
                 _miniVr.Place(false, default, Quaternion.identity, 0f);
                 _miniGrab.Place(false, default, Quaternion.identity, 0f);
+                _miniMarble.Place(false, default, Quaternion.identity, 0f);
                 return;
             }
 
@@ -847,6 +856,7 @@ namespace CozyMarblesVR
             }
             float size = rowH * mpp;
             _miniGrab.Place(true, at(x + rowH, rowY), _build.Rot, size);
+            _miniMarble.Place(true, at(x + 2f * rowH + gap + rowH * 0.5f, rowY), _build.Rot, size);
             _miniVr.Place(true, at(colX, rowY - (rowH + gap)), _build.Rot, size);
             _miniInfo.Place(true, at(colX, rowY - 2f * (rowH + gap)), _build.Rot, size);
         }
@@ -1002,14 +1012,15 @@ namespace CozyMarblesVR
         /// The off-hand "menu panel" button. Free mode: tap opens/closes the toolbox, holding carries the whole left-hand
         /// menu on the controller and releasing leaves it there. "Always on hand" mode: tap shows/hides the whole menu.
         /// </summary>
-        public void MenuPanelButton(bool held, bool inMenu)
+        /// <param name="alreadyHeld">the press has already been held for a while (marble mode passes L2 on late): carry the menu at once</param>
+        public void MenuPanelButton(bool held, bool inMenu, bool alreadyHeld = false)
         {
             if (inMenu) held = false;
             float now = Time.unscaledTime;
             bool attachedMode = Plugin.Cfg.AlwaysAttached.Value;
             if (held && !_buttonPrev)
             {
-                _buttonDownTime = now;
+                _buttonDownTime = alreadyHeld ? now - 1f : now;
                 if (attachedMode) _pendingHide = true; else _pendingTap = true;
             }
             if (held && _pendingTap && now - _buttonDownTime > 0.3f)
@@ -1191,6 +1202,7 @@ namespace CozyMarblesVR
                 if (HitQuad(_miniInfo.Quad, worldRay, out Vector3 h3, out float d3) && d3 < dist) { best = Widget.Info; hit = h3; dist = d3; panel = null; mini = _miniInfo; }
                 if (HitQuad(_miniVr.Quad, worldRay, out Vector3 h4, out float d4) && d4 < dist) { best = Widget.Settings; hit = h4; dist = d4; panel = null; mini = _miniVr; }
                 if (HitQuad(_miniGrab.Quad, worldRay, out Vector3 h5, out float d5) && d5 < dist) { best = Widget.Grab; hit = h5; dist = d5; panel = null; mini = _miniGrab; }
+                if (HitQuad(_miniMarble.Quad, worldRay, out Vector3 h6, out float d6) && d6 < dist) { best = Widget.Marble; hit = h6; dist = d6; panel = null; mini = _miniMarble; }
             }
             _hoverPanel = panel;
             _hoverMini = mini;
@@ -1205,6 +1217,7 @@ namespace CozyMarblesVR
             _miniInfo.SetHover(_hoverMini == _miniInfo && w == Widget.Info);
             _miniVr.SetHover(_hoverMini == _miniVr && w == Widget.Settings);
             _miniGrab.SetHover(_hoverMini == _miniGrab && w == Widget.Grab);
+            _miniMarble.SetHover(_hoverMini == _miniMarble && w == Widget.Marble);
             if (w != Widget.None && _hoverPanel != null) _focus = _hoverPanel;
         }
 
@@ -1472,6 +1485,7 @@ namespace CozyMarblesVR
             if (name == "info") return _miniInfo.Quad.position;
             if (name == "mvr") return _miniVr.Quad.position;
             if (name == "mgrab") return _miniGrab.Quad.position;
+            if (name == "mmarble") return _miniMarble.Quad.position;
             foreach (var tile in _tiles) if (name == "tile" + tile.Name) return tile.View.Quad.position;
             var p = name.StartsWith("b") ? _build : _main;
             string n = name.StartsWith("b") ? name.Substring(1) : name;

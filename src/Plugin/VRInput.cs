@@ -277,6 +277,31 @@ namespace CozyMarblesVR
             now[(int)Ctl.PBumper] = p.Valid && p.Bumper;
             now[(int)Ctl.OBumper] = o.Valid && o.Bumper;
 
+            // marble mode: L1 (bumper of the other hand) = throw faster, L2 (its trigger) tapped = slower.
+            // Holding L2 still does what it always does (build menu on the hand), so the menu stays reachable.
+            _menuHoldNow = false;
+            if (Grab.MarbleActive && !Game.InMenu)
+            {
+                bool pointerIsRight = Plugin.Cfg.PointerHand.Value == Hand.Right;
+                int l1 = (int)(pointerIsRight ? Ctl.OBumper : Ctl.PBumper);
+                int l2 = (int)(pointerIsRight ? Ctl.OTrigger : Ctl.PTrigger);
+                if (l2 == (int)Ctl.PTrigger) l2 = -1;   // left-handed laser: that trigger drops the marble, keep it
+                if (now[l1] && !_l1Was) StepLevel(+1);
+                _l1Was = now[l1];
+                now[l1] = false;
+                if (l2 >= 0)
+                {
+                    bool l2Now = now[l2];
+                    float t = Time.unscaledTime;
+                    if (l2Now && !_l2Was) { _l2DownAt = t; _l2PassOn = false; }
+                    if (l2Now && !_l2PassOn && t - _l2DownAt > 0.35f) { _l2PassOn = true; _menuHoldNow = true; }
+                    if (!l2Now && _l2Was && !_l2PassOn) StepLevel(-1);
+                    _l2Was = l2Now;
+                    now[l2] = l2Now && _l2PassOn;
+                }
+            }
+            else { _l1Was = _l2Was = _l2PassOn = false; }
+
             DetectGrabToggle(now);
 
             bool alt = false;
@@ -302,6 +327,32 @@ namespace CozyMarblesVR
         }
 
         // ------------------------------------------------------------------ grab mode
+
+        bool _l1Was, _l2Was, _l2PassOn, _menuHoldNow;
+        float _l2DownAt;
+
+        /// <summary>Throw level 0 (drop) .. 6, one step per press.</summary>
+        static void StepLevel(int sign)
+        {
+            var e = Plugin.Cfg.ThrowLevel;
+            e.Value = Mathf.Clamp(e.Value + sign, 0, MarbleLauncher.MaxLevel);
+        }
+
+        // The game locks the mouse while the right button turns the camera and unlocks it only on the frame the
+        // button is released - if that frame is missed (mode change, menu, B used as "back"), the lock stays and
+        // e.g. the build menu ignores clicks on pieces (tabs still work). Release a lock nobody holds any more.
+        float _staleLock;
+
+        void ReleaseStaleMouseLock(float dt)
+        {
+            var im = TimR.InputStuff.InputManager._;
+            if (im == null || !im.MouseLocked || Held(VRAction.RightClick)) { _staleLock = 0f; return; }
+            _staleLock += dt;
+            if (_staleLock < 0.2f) return;
+            _staleLock = 0f;
+            im.SetMouseLocked(false);
+            Plugin.Log.LogInfo("Released a stuck mouse lock of the game (right button no longer held).");
+        }
 
         float _lastBumperTap = -10f;
         bool _gHeld, _gArm, _gMoving, _gPressOnUi, _gWasPlacing, _rotHigh;
@@ -341,7 +392,7 @@ namespace CozyMarblesVR
         void UpdateGrab(float dt)
         {
             bool placing = Game.Placing && !Game.InMenu;
-            if (!Grab.Active || _navActive)
+            if (!Grab.Active || _navActive || (Grab.MarbleActive && !placing))
             {
                 Grab.Holding = false;
                 _gHeld = _gArm = _gMoving = false;
@@ -486,9 +537,11 @@ namespace CozyMarblesVR
 
             UpdateGrab(dt);
             _hud.SetGrabLabel(Grab.Active);
+            _hud.SetMarbleLabel(Grab.MarbleActive);
 
             // left trigger (default): build menu - tap shows/hides it, hold carries it on the hand
-            _hud.MenuPanelButton(Held(VRAction.MenuPanel), Game.InMenu);
+            _hud.MenuPanelButton(Held(VRAction.MenuPanel), Game.InMenu, _menuHoldNow);
+            ReleaseStaleMouseLock(dt);
 
             bool lmb = Held(VRAction.LeftClick), rmb = Held(VRAction.RightClick), mmb = Held(VRAction.MiddleClick);
             bool anyMouse = lmb || rmb || mmb;
@@ -595,6 +648,22 @@ namespace CozyMarblesVR
             }
 
         Buttons:
+            // marble mode: the trigger drops (or throws) a marble at the ball instead of clicking into the world
+            bool marbleTrigger = _act[(int)VRAction.LeftClick];
+            if (Grab.MarbleActive && !OverUi && !_navActive && p.Valid && !Game.InMenu && !Game.Placing)
+            {
+                if (marbleTrigger && !_marbleTriggerPrev)
+                {
+                    float speed = MarbleLauncher.Speed * _rig.lossyScale.x;
+                    Vector3 velocity = MarbleLauncher.LaunchDirection(Grab.TipDir) * speed;
+                    var launcher = _manager.Launcher;
+                    if (launcher == null || !launcher.Release(velocity)) MarbleDropper.Drop(Grab.Tip, velocity);
+                }
+                if (marbleTrigger) MaskLeftClick(); // the game never sees this press
+                lmb = false;
+                anyMouse = rmb || mmb;
+            }
+            _marbleTriggerPrev = marbleTrigger;
             AnyButtonHeld = anyMouse;
 
             // mouse buttons
@@ -662,7 +731,9 @@ namespace CozyMarblesVR
 
         // ------------------------------------------------------------------ mod widgets
 
-        enum Capture { None, Drag, Swallow }
+        bool _marbleTriggerPrev;
+
+        enum Capture { None, Drag, Swallow, SettingsDrag }
         Capture _capture;
 
         void MaskLeftClick()
@@ -674,6 +745,7 @@ namespace CozyMarblesVR
         void ReleaseCapture()
         {
             if (_capture == Capture.Drag) _hud.EndDrag();
+            if (_capture == Capture.SettingsDrag) _manager.Settings.EndDrag();
             _capture = Capture.None;
             _hud.SetWidgetHover(HudPanel.Widget.None);
         }
@@ -702,6 +774,19 @@ namespace CozyMarblesVR
                 ReleaseCapture();
                 MaskLeftClick();
             }
+            else if (_capture == Capture.SettingsDrag)
+            {
+                // moving the VR settings panel by its grip handle
+                if (held && settings.Open)
+                {
+                    settings.UpdateDrag(localRay, _tracking.HeadPos, PointerStick.y, dt);
+                    MaskLeftClick();
+                    point = settings.Hit(ray, out Vector3 dHit, out float _) ? dHit : ray.GetPoint(1f);
+                    return true;
+                }
+                ReleaseCapture();
+                MaskLeftClick();
+            }
             else if (_capture == Capture.Swallow)
             {
                 if (held) MaskLeftClick();
@@ -721,8 +806,16 @@ namespace CozyMarblesVR
                 point = helpNearer ? hHit : sHit;
                 if (down && _capture == Capture.None)
                 {
-                    if (helpNearer) help.Click(); else settings.Click();
-                    _capture = Capture.Swallow;
+                    if (!helpNearer && settings.HandleHover)
+                    {
+                        settings.BeginDrag(localRay);
+                        _capture = Capture.SettingsDrag;
+                    }
+                    else
+                    {
+                        if (helpNearer) help.Click(); else settings.Click();
+                        _capture = Capture.Swallow;
+                    }
                 }
                 if (_capture != Capture.None) MaskLeftClick();
                 return true;
@@ -742,12 +835,17 @@ namespace CozyMarblesVR
                 if (widget == HudPanel.Widget.Settings)
                 {
                     if (settings.Open) settings.Close();
-                    else settings.Show(_hud.RootPosition, _hud.RootRotation, _hud.PanelWidth, _hud.PanelHeight);
+                    else settings.Show(_hud.RootPosition, _hud.RootRotation, _hud.PanelWidth, _hud.PanelHeight, _tracking.HeadPos);
                     _capture = Capture.Swallow;
                 }
                 else if (widget == HudPanel.Widget.Grab)
                 {
                     Grab.Toggle();
+                    _capture = Capture.Swallow;
+                }
+                else if (widget == HudPanel.Widget.Marble)
+                {
+                    Grab.ToggleMarbles();
                     _capture = Capture.Swallow;
                 }
                 else if (widget == HudPanel.Widget.Info)

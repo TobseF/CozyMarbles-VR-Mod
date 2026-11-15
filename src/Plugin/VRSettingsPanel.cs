@@ -16,6 +16,7 @@ namespace CozyMarblesVR
         const float Px = 0.001f;           // canvas unit = 1 mm
         const float W = 640f;
         const float RowH = 52f;
+        const float HandleH = 44f, HandleGap = 14f;
 
         readonly Transform _rig;
         readonly HudPanel _hud;
@@ -36,6 +37,14 @@ namespace CozyMarblesVR
         readonly List<Element> _buttons = new List<Element>();
         readonly List<Element> _values = new List<Element>();
         Element _hover;
+        RectTransform _handle;
+        Image _handleImg;
+        bool _handleHover, _dragging;
+        float _dragDist;
+        Vector3 _dragOffset;
+
+        /// <summary>The laser is on the grip handle (checked by the last <see cref="Hit"/>).</summary>
+        public bool HandleHover => _handleHover;
 
         public bool Open => _open;
 
@@ -104,17 +113,32 @@ namespace CozyMarblesVR
             y = Stepper(Loc.T("Weltmaßstab", "World scale"), y, font, () => $"1 : {c.WorldScale.Value:0}", () => c.WorldScale.Value = Mathf.Clamp(Mathf.Round(c.WorldScale.Value - 1f), c.MinWorldScale.Value, c.MaxWorldScale.Value), () => c.WorldScale.Value = Mathf.Clamp(Mathf.Round(c.WorldScale.Value + 1f), c.MinWorldScale.Value, c.MaxWorldScale.Value));
             y = Toggle(Loc.T("Greifmodus", "Grab mode"), y, font, () => c.GrabMode.Value ? Loc.T("Hand", "Hand") : Loc.T("Maus", "Mouse"), () => c.GrabMode.Value = !c.GrabMode.Value);
             y = Toggle(Loc.T("Drehen", "Turning"), y, font, () => c.Turning.Value == TurnMode.Snap ? Loc.T("Stufen", "Snap") : Loc.T("Weich", "Smooth"), () => c.Turning.Value = c.Turning.Value == TurnMode.Snap ? TurnMode.Smooth : TurnMode.Snap);
+            y = Header(Loc.T("Murmeln (Handmodus)", "Marbles (hand mode)"), y - 6f, font);
+            y = Toggle(Loc.T("Murmel-Modus (Trigger)", "Marble mode (trigger)"), y, font, () => c.MarbleMode.Value ? Loc.T("Ein", "On") : Loc.T("Aus", "Off"), () => VRManager.Instance?.VrInput?.Grab.ToggleMarbles());
+            y = Stepper(Loc.T("Wurf-Tempo (L1 / L2)", "Throw speed (L1 / L2)"), y, font, () => c.ThrowLevel.Value <= 0 ? Loc.T("Fallen", "Drop") : $"{c.ThrowLevel.Value} / {MarbleLauncher.MaxLevel}", () => c.ThrowLevel.Value = Mathf.Clamp(c.ThrowLevel.Value - 1, 0, MarbleLauncher.MaxLevel), () => c.ThrowLevel.Value = Mathf.Clamp(c.ThrowLevel.Value + 1, 0, MarbleLauncher.MaxLevel));
+            y = Toggle(Loc.T("Murmel schubst (Physik)", "Marble pushes (physics)"), y, font, () => c.MarblePhysics.Value ? Loc.T("Ein", "On") : Loc.T("Aus", "Off"), () => c.MarblePhysics.Value = !c.MarblePhysics.Value);
+
+            y = Header(Loc.T("Sonstiges", "Other"), y - 6f, font);
             y = Toggle(Loc.T("Startfenster beim Spielstart", "Start window on launch"), y, font, () => c.ShowStartDialog.Value ? Loc.T("Zeigen", "Show") : Loc.T("Aus", "Off"), () => c.ShowStartDialog.Value = !c.ShowStartDialog.Value);
             y = Wide(Loc.T("Am Monitor weiterspielen (F9 = zurück)", "Continue on the monitor (F9 = back)"), y - 6f, font, () => { Close(); VRManager.Instance?.SetFlat(true); });
             y = Wide(Loc.T("Schließen", "Close"), y, font, Close, true);
 
-            float height = -y + 20f;
+            float bgHeight = -y + 20f;
+            float height = bgHeight + HandleGap + HandleH;   // the grip handle hangs below the panel
             _canvasRt.sizeDelta = new Vector2(W, height);
             _canvasRt.pivot = new Vector2(0.5f, 1f);
             _canvasRt.localScale = Vector3.one * Px;
 
+            // grip handle (same look as under the other windows): drag it to move the panel
+            var hrt = NewRect("Handle", _canvasRt, new Vector2(0f, -bgHeight - HandleGap - HandleH * 0.5f), new Vector2(HandleH * 5f, HandleH), new Vector2(0.5f, 0.5f));
+            _handleImg = hrt.gameObject.AddComponent<Image>();
+            var tex = Icons.Get("grab_bar");
+            if (tex != null) _handleImg.sprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+            _handleImg.raycastTarget = false;
+            _handle = hrt;
+
             // background behind everything
-            var bg = NewRect("Background", _canvasRt, new Vector2(0f, 0f), new Vector2(W, height), new Vector2(0.5f, 1f));
+            var bg = NewRect("Background", _canvasRt, new Vector2(0f, 0f), new Vector2(W, bgHeight), new Vector2(0.5f, 1f));
             var bgImg = bg.gameObject.AddComponent<Image>();
             bgImg.color = new Color(0.13f, 0.1f, 0.17f, 0.94f);
             bg.SetAsFirstSibling();
@@ -203,25 +227,95 @@ namespace CozyMarblesVR
 
         // ---------------------------------------------------------------- open / close
 
-        /// <summary>Opens next to the given panel pose (tracking space).</summary>
-        public void Show(Vector3 panelPos, Quaternion panelRot, float panelWidth, float panelHeight)
+        /// <summary>Opens next to the given panel pose (tracking space), turned towards the viewer.</summary>
+        public void Show(Vector3 panelPos, Quaternion panelRot, float panelWidth, float panelHeight, Vector3 headPos)
         {
             if (_go != null && _builtGerman != Loc.German) { UnityEngine.Object.Destroy(_go); _go = null; _buttons.Clear(); _values.Clear(); }
             if (_go == null) Build();
             Vector3 right = panelRot * Vector3.right;
-            Vector3 up = panelRot * Vector3.up;
             float h = _canvasRt.sizeDelta.y * Px;
-            _go.transform.localPosition = panelPos + right * (panelWidth * 0.5f + W * Px * 0.5f + 0.05f) + up * (h * 0.5f);
-            _go.transform.localRotation = panelRot;
+            Vector3 center = panelPos + right * (panelWidth * 0.5f + W * Px * 0.5f + 0.05f);
+            // next to a menu held on the hand that would be right in your face: keep a comfortable reading distance
+            Vector3 away = center - headPos;
+            const float minDist = 0.85f;
+            if (away.magnitude < minDist)
+                center = headPos + (away.sqrMagnitude > 1e-4f ? away.normalized : panelRot * Vector3.forward) * minDist;
+            _lastHead = headPos;
+            Quaternion rot = FaceViewer(center, headPos);
+            _go.transform.localRotation = rot;
+            _go.transform.localPosition = center + rot * Vector3.up * (h * 0.5f);
             _go.SetActive(true);
             _open = true;
+            _dragging = false;
             Refresh();
         }
+
+        /// <summary>Opens centred on the given point (tracking space), turned towards the viewer.</summary>
+        public void ShowAt(Vector3 center, Vector3 headPos)
+        {
+            if (_go != null && _builtGerman != Loc.German) { UnityEngine.Object.Destroy(_go); _go = null; _buttons.Clear(); _values.Clear(); }
+            if (_go == null) Build();
+            float h = _canvasRt.sizeDelta.y * Px;
+            _lastHead = headPos;
+            Quaternion rot = FaceViewer(center, headPos);
+            _go.transform.localRotation = rot;
+            _go.transform.localPosition = center + rot * Vector3.up * (h * 0.5f);
+            _go.SetActive(true);
+            _open = true;
+            _dragging = false;
+            Refresh();
+        }
+
+        /// <summary>Turned straight towards the head position, kept upright (the canvas faces along +Z, away from the viewer).</summary>
+        static Quaternion FaceViewer(Vector3 center, Vector3 headPos)
+        {
+            Vector3 look = center - headPos;
+            return look.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(look.normalized, Vector3.up) : Quaternion.identity;
+        }
+
+        // ---------------------------------------------------------------- moving with the grip handle (tracking space)
+
+        public bool Dragging => _dragging;
+
+        public void BeginDrag(Ray localRay)
+        {
+            if (!_open) return;
+            var t = _go.transform;
+            var plane = new Plane(t.localRotation * Vector3.forward, t.localPosition);
+            if (!plane.Raycast(localRay, out float d)) d = Vector3.Distance(localRay.origin, t.localPosition);
+            Vector3 hit = localRay.GetPoint(d);
+            _dragDist = d;
+            _dragOffset = Quaternion.Inverse(t.localRotation) * (t.localPosition - hit);
+            _dragging = true;
+        }
+
+        /// <summary>Follows the laser at the grab distance (stick = further/closer) and keeps facing the viewer.</summary>
+        public void UpdateDrag(Ray localRay, Vector3 headPos, float stickY, float dt)
+        {
+            if (!_dragging || !_open) return;
+            _lastHead = headPos;
+            if (Mathf.Abs(stickY) > 0.2f) _dragDist = Mathf.Clamp(_dragDist + stickY * 1.2f * dt, 0.25f, 8f);
+            var t = _go.transform;
+            Vector3 hit = localRay.GetPoint(_dragDist);
+            Quaternion rot = t.localRotation;
+            float h = _canvasRt.sizeDelta.y * Px;
+            for (int i = 0; i < 2; i++)
+            {
+                Vector3 pos = hit + rot * _dragOffset;
+                rot = FaceViewer(pos - rot * Vector3.up * (h * 0.5f), headPos);
+            }
+            t.localRotation = rot;
+            t.localPosition = hit + rot * _dragOffset;
+            Refresh();
+        }
+
+        public void EndDrag() { _dragging = false; Refresh(); }
 
         public void Close()
         {
             if (_go != null) _go.SetActive(false);
             _open = false;
+            _dragging = false;
             _hover = null;
         }
 
@@ -231,6 +325,7 @@ namespace CozyMarblesVR
             foreach (var v in _values) v.Label.text = v.Text();
             foreach (var b in _buttons) b.Img.color = b == _hover ? new Color(1f, 0.82f, 0.35f, 1f) : b.Color;
             foreach (var b in _buttons) b.Label.color = b == _hover ? new Color(0.15f, 0.1f, 0.2f, 1f) : Color.white;
+            if (_handleImg != null) _handleImg.color = (_handleHover || _dragging) ? new Color(1f, 0.86f, 0.5f, 1f) : Color.white;
         }
 
         // ---------------------------------------------------------------- laser
@@ -241,6 +336,7 @@ namespace CozyMarblesVR
             hit = default;
             dist = 0f;
             _hover = null;
+            _handleHover = false;
             if (!_open) return false;
             var t = _go.transform;
             var plane = new Plane(t.forward, t.position);
@@ -253,8 +349,30 @@ namespace CozyMarblesVR
                 Vector2 lb = b.Rt.InverseTransformPoint(hit);
                 if (b.Rt.rect.Contains(lb)) { _hover = b; break; }
             }
+            if (_handle != null)
+            {
+                Vector2 lh = _handle.InverseTransformPoint(hit);
+                Rect r = _handle.rect;
+                r.xMin -= 10f; r.xMax += 10f; r.yMin -= 10f; r.yMax += 10f; // a little extra margin
+                _handleHover = r.Contains(lh);
+            }
             return true;
         }
+
+        /// <summary>Diagnostics: pose of the panel in tracking space.</summary>
+        public string DebugState()
+        {
+            if (_go == null) return "-";
+            var tr = _go.transform;
+            Vector3 center = tr.localPosition - tr.localRotation * Vector3.up * (_canvasRt.sizeDelta.y * Px * 0.5f);
+            float angle = Vector3.Angle(tr.localRotation * Vector3.forward, center - _lastHead);
+            return $"pos={tr.localPosition} fwd={tr.localRotation * Vector3.forward} facingError={angle:F1}deg dragging={_dragging} handleHover={_handleHover}";
+        }
+
+        Vector3 _lastHead;
+
+        /// <summary>World position of the grip handle (diagnostics).</summary>
+        public Vector3 DebugHandlePoint() => _open && _handle != null ? _handle.TransformPoint(_handle.rect.center) : Vector3.zero;
 
         /// <summary>World position of the n-th button (diagnostics).</summary>
         public Vector3 DebugButtonPoint(int index)

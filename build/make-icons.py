@@ -166,7 +166,80 @@ def resize():
     save(img, "resize", n, n)
 
 
+def marble(d, cx, cy, r):
+    # glass marble: shaded blue sphere (light from the upper left), one orange swirl, white gloss spot
+    d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(40, 95, 175, 255))
+    for i in range(1, 9):
+        k = 1 - i * 0.09
+        ox, oy = -r * 0.035 * i, -r * 0.035 * i
+        c = (int(40 + 10 * i), int(95 + 10 * i), int(175 + 8 * i), 255)
+        d.ellipse((cx + ox - r * k, cy + oy - r * k, cx + ox + r * k, cy + oy + r * k), fill=c)
+    d.arc((cx - r * 1.1, cy - r * 0.35, cx + r * 0.5, cy + r * 1.25), 280, 20, fill=ORANGE, width=int(r * 0.22))
+    d.arc((cx - r * 0.5, cy - r * 1.25, cx + r * 1.1, cy + r * 0.35), 100, 200, fill=ORANGE, width=int(r * 0.22))
+    d.ellipse((cx - r, cy - r, cx + r, cy + r), outline=INK, width=s(3))
+    d.ellipse((cx - r * 0.58, cy - r * 0.62, cx - r * 0.18, cy - r * 0.3), fill=(255, 255, 255, 230))
+
+
+def icon_marble(on):
+    n = 128
+    img, d = canvas(n, n)
+    m = s(10)
+    d.ellipse((m, m + s(6), s(n) - m, s(n) - m + s(4)), fill=SHADOW)
+    d.ellipse((m, m, s(n) - m, s(n) - m - s(2)), fill=(88, 190, 120, 255) if on else CREAM, outline=(60, 150, 90, 255) if on else RING, width=s(7))
+    marble(d, s(64), s(62), s(30))
+    if on:
+        # little drop lines below: "rolling"
+        for i, w in enumerate((s(26), s(16))):
+            y = s(101) + i * s(8)
+            d.line((s(64) - w / 2, y, s(64) + w / 2, y), fill=WHITE, width=s(4))
+    save(img, "btn_marble_on" if on else "btn_marble", n, n)
+
+
+def gauge():
+    # throw-speed dial: cream plate, coloured arc (slow = teal ... fast = red) with ticks in the upper half,
+    # pivot of the needle at the centre, room for the number in the lower half
+    n = 128
+    img, d = canvas(n, n)
+    c = s(64)
+    R = s(58)
+    d.pieslice((c - R, c - R + s(4), c + R, c + R + s(4)), 180, 360, fill=SHADOW)
+    d.rounded_rectangle((c - R, c - s(2), c + R, c + s(44)), radius=s(16), fill=SHADOW)
+    d.pieslice((c - R, c - R, c + R, c + R), 180, 360, fill=CREAM)
+    d.rounded_rectangle((c - R, c - s(6), c + R, c + s(40)), radius=s(16), fill=CREAM)
+    d.arc((c - R, c - R, c + R, c + R), 180, 360, fill=RING, width=s(5))
+    stops = [(64, 178, 174), (120, 200, 110), (250, 205, 70), (240, 146, 58), (220, 70, 50)]
+    steps = 36
+    r0 = R - s(9)
+    for i in range(steps):
+        f = i / (steps - 1)
+        k = min(int(f * (len(stops) - 1)), len(stops) - 2)
+        u = f * (len(stops) - 1) - k
+        col = tuple(int(stops[k][j] + (stops[k + 1][j] - stops[k][j]) * u) for j in range(3)) + (255,)
+        a0 = 180 + 180 * i / steps
+        d.arc((c - r0, c - r0, c + r0, c + r0), a0, a0 + 180 / steps + 0.8, fill=col, width=s(11))
+    for i in range(9):
+        ang = math.radians(180 + 180 * i / 8)
+        r1, r2 = r0 - s(14), r0 - s(20 if i % 2 == 0 else 17)
+        d.line((c + r1 * math.cos(ang), c + r1 * math.sin(ang), c + r2 * math.cos(ang), c + r2 * math.sin(ang)), fill=INK, width=s(3))
+    save(img, "gauge", n, n)
+
+
+def gauge_needle():
+    # needle pointing up from the centre of the square, hub at the centre
+    n = 128
+    img, d = canvas(n, n)
+    c = s(64)
+    d.polygon([(c - s(4.5), c), (c, c - s(46)), (c + s(4.5), c)], fill=(200, 50, 40, 255))
+    d.ellipse((c - s(8), c - s(8), c + s(8), c + s(8)), fill=INK)
+    d.ellipse((c - s(3), c - s(3), c + s(3), c + s(3)), fill=CREAM)
+    save(img, "gauge_needle", n, n)
+
+
 if __name__ == "__main__":
+    gauge()
+    gauge_needle()
+    icon_marble(False)
+    icon_marble(True)
     icon_vr()
     icon_manual()
     toggle(False)

@@ -14,14 +14,26 @@ namespace CozyMarblesVR
         public bool Touching { get; private set; }
         public bool Holding { get; set; }
         public Vector3 Tip { get; private set; }
+        public Vector3 TipDir { get; private set; } = Vector3.forward;
 
         public bool Active => Plugin.Cfg.GrabMode.Value;
+        /// <summary>Hand mode with marble mode on: the trigger drops marbles instead of grabbing pieces.</summary>
+        public bool MarbleActive => Active && Plugin.Cfg.MarbleMode.Value;
 
         public GrabMode(Transform rig) { _rig = rig; }
+
+        public void ToggleMarbles()
+        {
+            bool on = !Plugin.Cfg.MarbleMode.Value;
+            Plugin.Cfg.MarbleMode.Value = on;
+            if (on && !Active) Plugin.Cfg.GrabMode.Value = true; // marbles are dropped from the ball of hand mode
+            Plugin.Log.LogInfo("Marble mode " + (on ? "on" : "off"));
+        }
 
         public void Toggle()
         {
             Plugin.Cfg.GrabMode.Value = !Plugin.Cfg.GrabMode.Value;
+            if (!Active) Plugin.Cfg.MarbleMode.Value = false; // marbles are a hand-mode feature
             Plugin.Log.LogInfo("Grab mode " + (Active ? "on" : "off"));
         }
 
@@ -30,6 +42,7 @@ namespace CozyMarblesVR
         {
             float s = Mathf.Max(0.0001f, _rig.lossyScale.x);
             Tip = aim.origin + aim.direction * (0.03f * s);
+            TipDir = aim.direction;
             return Tip;
         }
 
@@ -42,6 +55,12 @@ namespace CozyMarblesVR
         {
             float s = Mathf.Max(0.0001f, _rig.lossyScale.x);
             tip = UpdateTip(aim);
+            if (MarbleActive && !Game.Placing)
+            {
+                // marble mode never touches pieces: the trigger is for marbles
+                Touching = false;
+                return new Ray(tip + Vector3.up * 1000f, Vector3.up);
+            }
             if (Game.Placing)
             {
                 Touching = false;
