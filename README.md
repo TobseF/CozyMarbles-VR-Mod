@@ -40,9 +40,10 @@
 </p>
 
 The marble run sits in front of you as a tabletop model that you can grab, turn and scale. The menus float as
-panels in the room, and you build with a laser pointer or directly with your hands. The mod was made for PC
-streaming to the **Steam Frame**, but it works with any SteamVR / OpenXR headset. It doesn't change any game
-files, and you can switch between VR and monitor at any time.
+panels in the room, and you build with a laser pointer or directly with your hands. The mod was made for the
+**Steam Frame** and has been tested extensively and optimised on it in PC VR mode (streamed through SteamVR): it runs
+at a stable frame rate and plays very well. Other SteamVR / OpenXR headsets should work too. It doesn't change any
+game files, and you can switch between VR and monitor at any time.
 
 ---
 
@@ -110,7 +111,7 @@ If a game update removes the files in `Cozy Marbles_Data`, the mod restores them
 | 🔦 **Pointer mode**            | The game's original grid building, operated with a laser pointer.                                                                                                                                                                             |
 | 🪟 **Menus in the room**       | The main menu floats in front of you. The build menu floats above your left controller, all toolbar functions sit as round buttons on it. Object options appear right above the selected piece.                                              |
 | 🎮 **Steam Frame controllers** | Native input profile and the real 3D controller models, loaded from your SteamVR installation.                                                                                                                                                |
-| 🖥️ **VR ↔ monitor**           | Switch any time with **F9**, the **Play in VR / Play on monitor** entry in the main menu, or the small **VR 0.1.0** label below the game's version number (hover = tooltip, click = confirmation). The PC window shows a calm spectator view. |
+| 🖥️ **VR ↔ monitor**           | Switch any time with **F9**, the **Play in VR / Play on monitor** entry in the main menu, or the small **VR x.y.z** label below the game's version number (hover = tooltip, click = confirmation). The PC window shows a calm spectator view. |
 | 🌍 **English & German**        | All mod texts follow the game language (German → German, anything else → English).                                                                                                                                                            |
 
 ### Tools: pointer, hand, marble
@@ -260,8 +261,10 @@ To remove BepInEx as well, also delete `winhttp.dll`, `doorstop_config.ini`, `.d
 
 ## ⚠️ Known limitations
 
-- Development and testing happened mainly against Unity's mock OpenXR runtime. Feedback from real headsets is very welcome.
-- Stereo rendering runs in multi-pass mode (the game has no single-pass shaders), which costs performance.
+- Tested and tuned on the Steam Frame (PC VR through SteamVR). Other headsets have not been tested yet – feedback
+  is very welcome.
+- Stereo rendering runs in multi-pass mode (the game has no single-pass shaders), which costs some performance. If
+  the frame rate drops on your PC, pick a lower **Resolution per eye** in the VR settings.
 - The game's tutorial texts still mention mouse and keyboard buttons.
 - A few hint arrows that the game aligns to objects in the room appear on the menu panel.
 
@@ -290,7 +293,7 @@ cd CozyMarblesVR
 
 `make-dist.ps1` creates `dist\CozyMarblesVR.zip` (mod only) and `dist\CozyMarblesVR-with-BepInEx.zip`.
 Both mirror the game folder. Upload both as assets of a release tagged with the version from `src/Plugin/Plugin.cs`
-(e.g. `0.1.0`). The asset names stay the same in every release, so
+(e.g. `0.1.1`). The asset names stay the same in every release, so
 `https://github.com/TobseF/CozyMarbles-VR-Mod/releases/latest/download/CozyMarblesVR-with-BepInEx.zip` always points to
 the newest version, which helps installer hubs and scripts.
 
