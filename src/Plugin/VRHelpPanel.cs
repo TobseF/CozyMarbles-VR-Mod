@@ -53,6 +53,11 @@ namespace CozyMarblesVR
                 case VRAction.AltLayer: return Loc.T("Zweitbelegung (halten)", "Alternate layer (hold)");
                 case VRAction.MenuBack: return Loc.T("Zurück im Menü", "Back in menus");
                 case VRAction.MenuPanel: return Loc.T("Bau-Fenster: antippen = auf/zu, halten = an die Hand", "Build window: tap = open/close, hold = take on hand");
+                case VRAction.CycleTool: return Loc.T("Werkzeug wechseln: Zeiger → Hand → Murmel", "Next tool: pointer → hand → marble");
+                case VRAction.MenuCarry: return Loc.T("Halten: Ingame-Menü an der Hand · mit rechtem Grip: Welt skalieren", "Hold: in-game menu on the hand · with the right grip: scale the world");
+                case VRAction.ToggleIngameMenu: return Loc.T("Bau-Menü ein-/ausblenden", "Show / hide the build menu");
+                case VRAction.VRSettings: return Loc.T("VR-Einstellungen", "VR settings");
+                case VRAction.ResetMenu: return Loc.T("Menü wieder vor dich holen", "Bring the menu back in front of you");
                 default: return a.ToString();
             }
         }
@@ -71,28 +76,29 @@ namespace CozyMarblesVR
             // physical sides: rows for the right and the left controller
             var rightRows = new List<KeyValuePair<string, string>>
             {
-                Row("Trigger", right ? c.PointerTrigger.Value : c.OffTrigger.Value),
+                Row("R2 Trigger", right ? c.PointerTrigger.Value : c.OffTrigger.Value),
                 Row("Grip", right ? c.PointerGrip.Value : c.OffGrip.Value),
                 Row("A", right ? c.PointerPrimary.Value : c.OffPrimary.Value),
                 Row("B", right ? c.PointerSecondary.Value : c.OffSecondary.Value),
                 Row("X", c.FrameX.Value),
+                Row(Loc.T("Menü-Taste", "Menu button"), right ? c.PointerMenu.Value : c.OffMenu.Value),
                 Row("Y", c.FrameY.Value),
-                Row("Bumper", right ? c.PointerBumper.Value : c.OffBumper.Value),
+                Row("R1 Bumper", right ? c.PointerBumper.Value : c.OffBumper.Value),
                 Row(Loc.T("Stick-Klick", "Stick click"), right ? c.PointerStickClick.Value : c.OffStickClick.Value),
                 new KeyValuePair<string, string>("Stick", right ? Loc.T("Drehen  ·  ↑↓ Bauhöhe / scrollen / fliegen", "Turn  ·  ↑↓ build height / scroll / fly") : Loc.T("Fliegen", "Fly")),
             };
             var leftRows = new List<KeyValuePair<string, string>>
             {
-                Row("Trigger", right ? c.OffTrigger.Value : c.PointerTrigger.Value),
+                Row("L2 Trigger", right ? c.OffTrigger.Value : c.PointerTrigger.Value),
                 Row("Grip", right ? c.OffGrip.Value : c.PointerGrip.Value),
-                Row("Bumper", right ? c.OffBumper.Value : c.PointerBumper.Value),
+                Row("L1 Bumper", right ? c.OffBumper.Value : c.PointerBumper.Value),
                 Row(Loc.T("Steuerkreuz", "D-pad") + " ↑", c.DpadUp.Value),
                 Row(Loc.T("Steuerkreuz", "D-pad") + " ↓", c.DpadDown.Value),
                 Row(Loc.T("Steuerkreuz", "D-pad") + " ←", c.DpadLeft.Value),
                 Row(Loc.T("Steuerkreuz", "D-pad") + " →", c.DpadRight.Value),
                 Row(Loc.T("Stick-Klick", "Stick click"), right ? c.OffStickClick.Value : c.PointerStickClick.Value),
                 new KeyValuePair<string, string>("Stick", right ? Loc.T("Fliegen", "Fly") : Loc.T("Drehen  ·  ↑↓ Bauhöhe / scrollen / fliegen", "Turn  ·  ↑↓ build height / scroll / fly")),
-                Row(Loc.T("View-Taste", "View button"), c.OffMenu.Value),
+                Row(Loc.T("View-Taste", "View button"), right ? c.OffMenu.Value : c.PointerMenu.Value),
             };
 
             float y = 0f;
@@ -106,13 +112,14 @@ namespace CozyMarblesVR
 
             string[] notes =
             {
-                Loc.T("Beide Grips halten und die Hände auseinander- oder zusammenziehen: Welt verschieben, drehen und skalieren.", "Hold both grips and move your hands apart or together: move, rotate and scale the world."),
+                Loc.T("Grip halten: Welt verschieben. Beide Grips: Welt drehen und skalieren.", "Hold a grip: move the world. Both grips: rotate and scale it."),
                 Loc.T("Menü ohne Laser: linkes Steuerkreuz (oder linker Stick) bewegt den Fokus, A wählt aus, B geht zurück.", "Menus without laser: left D-pad (or left stick) moves the focus, A selects, B goes back."),
                 Loc.T("Fenster verschieben: Leiste unter dem Fenster greifen (rechter Stick ↑↓: näher / weiter weg). Ecke unten rechts: Größe.", "Move windows: grab the bar below the window (right stick ↑↓: closer / farther). Bottom right corner: size."),
-                Loc.T("Greifmodus (Knopf „Maus/Hand“ im linken Menü oder linken Bumper zweimal antippen): Kugel am Controller statt Laser.", "Grab mode (button “Mouse/Hand” in the left menu, or double-tap the left bumper): a ball on the controller instead of the laser."),
+                Loc.T("Werkzeuge (L2 oder die runden Knöpfe am linken Controller): Zeiger = Laser, Hand = Kugel am Controller, Murmel = Murmeln werfen.", "Tools (L2 or the round buttons on the left controller): pointer = laser, hand = ball on the controller, marble = throw marbles."),
                 Loc.T("Trigger halten = Teil greifen und frei bewegen, Controller drehen = Teil drehen, loslassen = einrasten (Vorschau zeigt wohin).", "Hold trigger = grab and move a piece freely, twist controller = rotate it, release = snap in (preview shows where)."),
-                Loc.T("Murmel-Knopf im linken Menü: die nächste Murmel wartet am Controller, Trigger = loslassen bzw. werfen. L1 = schneller, L2 kurz = langsamer werfen (Stufe 0–6 auf dem Controller), L2 halten = Bau-Menü.", "Marble button in the left menu: the next marble waits on the controller, trigger = drop or throw it. L1 = throw faster, L2 tap = slower (level 0–6 shown on the controller), hold L2 = build menu."),
-                Loc.T("Knopf „VR“ neben der Menüleiste: VR-Einstellungen (Größen, Abstände, Bau-Fenster an der Hand).", "Button “VR” next to the menu bar: VR settings (sizes, distances, build window on the hand)."),
+                Loc.T("Murmel: die nächste Murmel wartet am Controller, R2 = loslassen bzw. werfen, A / Y = schneller / langsamer (Stufe 0–6 auf dem rechten Griff).", "Marble: the next marble waits on the controller, R2 = drop or throw it, A / Y = faster / slower (level 0–6 on the right handle)."),
+                Loc.T("Runde Knöpfe am linken Controller: mit dem Laser anklicken oder mit der Kugel antippen. Die Symbole auf den Tasten zeigen immer, was sie gerade tun.", "Round buttons on the left controller: click them with the laser or touch them with the ball. The symbols on the buttons always show what they do right now."),
+                Loc.T("View-Taste links: VR-Einstellungen. Menü-Taste rechts: Hauptmenü. Im Menü: L2 = Menü wieder vor dich, R2 ins Leere = zurück zur Startposition.", "Left View button: VR settings. Right Menu button: main menu. In menus: L2 = menu back in front of you, R2 into empty space = back to the start position."),
             };
             foreach (var n in notes)
             {

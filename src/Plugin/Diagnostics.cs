@@ -23,6 +23,7 @@ namespace CozyMarblesVR
         public static readonly Dictionary<string, bool> Buttons = new Dictionary<string, bool>();
         public static Vector2 LeftStick, RightStick;
         public static Vector3 LeftHandOffset, RightHandOffset;
+        public static Vector3 LeftHandEuler;   // extra rotation of the simulated left controller (pitch, yaw, roll)
         public static float AimForward;
 
         public static bool Button(string name) => Buttons.TryGetValue(name, out bool b) && b;
@@ -98,6 +99,14 @@ namespace CozyMarblesVR
                 case "grab": Plugin.Cfg.GrabMode.Value = a[1] == "on"; break;
                 case "marble": Plugin.Cfg.MarbleMode.Value = a[1] == "on"; break;
                 case "aimfwd": SimOverride.AimForward = F(a[1]); break;
+                case "aimring": SimOverride.Enabled = true; SimOverride.HasAimWorld = true; SimOverride.AimWorld = _manager.Decor.DebugRingPoint(a[1]); break;
+                case "pokering": _manager.DebugHandAbove(_manager.Decor.DebugRingPoint(a[1]), F(a[2])); break;
+                case "maingfx": Plugin.Log.LogInfo(_manager.Hud.DebugMainGraphics(F(a[1]))); break;
+                case "spectator": Plugin.Cfg.DesktopView.Value = a[1] == "on"; break;
+                case "specscale": Plugin.Cfg.DesktopViewScale.Value = F(a[1]); break;
+                case "eyeres": Plugin.Cfg.EyeResolution.Value = int.Parse(a[1]); break;
+                case "fps": Plugin.Cfg.ShowFps.Value = a[1] == "on"; break;
+                case "tool": _manager.VrInput.Grab.SetTool(int.Parse(a[1])); break;
                 case "lockmouse": TimR.InputStuff.InputManager._?.SetMouseLocked(true); break;
                 case "physics": Plugin.Cfg.MarblePhysics.Value = a[1] == "on"; break;
                 case "throw": Plugin.Cfg.ThrowLevel.Value = int.Parse(a[1]); break;
@@ -107,7 +116,7 @@ namespace CozyMarblesVR
                 case "sim": SimOverride.Enabled = a[1] == "on"; break;
                 case "aim": SimOverride.Enabled = true; SimOverride.HasAimWorld = false; SimOverride.AimYaw = F(a[1]); SimOverride.AimPitch = F(a[2]); break;
                 case "aimworld": SimOverride.Enabled = true; SimOverride.HasAimWorld = true; SimOverride.AimWorld = new Vector3(F(a[1]), F(a[2]), F(a[3])); break;
-                case "aimwidget": SimOverride.Enabled = true; SimOverride.HasAimWorld = true; SimOverride.AimWorld = _manager.DebugWidgetPoint(a[1]); break;
+                case "aimwidget": SimOverride.Enabled = true; SimOverride.HasAimWorld = true; SimOverride.AimWorld = _manager.DebugWidgetPoint(a[1], a.Length >= 4 ? new Vector2(F(a[2]), F(a[3])) : Vector2.zero); break;   // optional offset in metres along the widget's right / up
                 case "aimsettings": SimOverride.Enabled = true; SimOverride.HasAimWorld = true; SimOverride.AimWorld = _manager.Settings.DebugButtonPoint(int.Parse(a[1])); break;
                 case "aimpx": SimOverride.Enabled = true; SimOverride.HasAimWorld = true; SimOverride.AimWorld = _manager.DebugPanelPoint(F(a[1]), F(a[2])); break;
                 case "down": SimOverride.Enabled = true; SimOverride.Buttons[a[1]] = true; break;
@@ -118,6 +127,7 @@ namespace CozyMarblesVR
                 case "recenter": _manager.Recenter(); break;
                 case "handr": SimOverride.Enabled = true; SimOverride.RightHandOffset = new Vector3(F(a[1]), F(a[2]), F(a[3])); break;
                 case "handl": SimOverride.Enabled = true; SimOverride.LeftHandOffset = new Vector3(F(a[1]), F(a[2]), F(a[3])); break;
+                case "handlrot": SimOverride.Enabled = true; SimOverride.LeftHandEuler = new Vector3(F(a[1]), F(a[2]), F(a[3])); break;
                 case "head": MockHead(new Vector3(F(a[1]), F(a[2]), F(a[3])), Quaternion.Euler(F(a[5]), F(a[4]), 0f)); break;
                 case "devices": DumpDevices(); break;
                 case "mockenv":
@@ -226,6 +236,13 @@ namespace CozyMarblesVR
             var d = XRBootstrap.Display;
             sb.AppendLine($"session: state={XRBootstrap.SessionState} visible={XRBootstrap.Visible} userFlat={_manager.UserFlat}");
             if (d != null) sb.AppendLine($"display: running={d.running} passes={d.GetRenderPassCount()} mirrorMode={d.GetPreferredMirrorBlitMode()} scale={d.scaleOfAllRenderTargets}");
+            if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset urp)
+                sb.AppendLine($"urp: asset={urp.name} renderScale={urp.renderScale} msaa={urp.msaaSampleCount} upscaling={urp.upscalingFilter} hdr={urp.supportsHDR} residentDrawer={typeof(UniversalRenderPipelineAsset).GetProperty("gpuResidentDrawerMode")?.GetValue(urp)} gpuOcclusion={urp.gpuResidentDrawerEnableOcclusionCullingInCameras} quality={QualitySettings.GetQualityLevel()}:{QualitySettings.names[QualitySettings.GetQualityLevel()]}");
+            foreach (var c in Camera.allCameras)
+            {
+                var u = c.GetComponent<UniversalAdditionalCameraData>();
+                if (u != null && u.renderType == CameraRenderType.Base) sb.AppendLine($"aa '{c.name}': mode={u.antialiasing} quality={u.antialiasingQuality} allowMSAA={c.allowMSAA} hdr={c.allowHDR} occlusion={c.useOcclusionCulling}");
+            }
             sb.AppendLine($"Screen {Screen.width}x{Screen.height} focus={Application.isFocused} fog={RenderSettings.fog} timeScale={Time.timeScale} fps={(1f / Mathf.Max(1e-4f, Time.smoothDeltaTime)):F0}");
             foreach (var c in Camera.allCameras)
             {

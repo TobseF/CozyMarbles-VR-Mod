@@ -101,6 +101,67 @@ namespace CozyMarblesVR
             }
         }
 
+        /// <summary>One part of a controller model (button, stick, trigger ...) in the model's own space.</summary>
+        public class PartGeometry
+        {
+            public Vector3 Center;    // average vertex position
+            public Vector3 Normal;    // average vertex normal (points out of the button)
+            public Vector3[] Vertices;
+
+            /// <summary>Highest point of the part along a direction, measured from its centre.</summary>
+            public float Top(Vector3 dir)
+            {
+                float top = float.MinValue;
+                foreach (var v in Vertices) top = Mathf.Max(top, Vector3.Dot(v - Center, dir));
+                return top;
+            }
+        }
+
+        static readonly Dictionary<string, Dictionary<string, PartGeometry>> PartCache = new Dictionary<string, Dictionary<string, PartGeometry>>();
+
+        /// <summary>
+        /// The separate part files SteamVR ships next to each model (a_button, dpad, trigger ...), keyed by part name.
+        /// They share the model's coordinate system, so their positions can be used directly in the model's space.
+        /// Empty when the models are not available.
+        /// </summary>
+        public static Dictionary<string, PartGeometry> Parts(bool left)
+        {
+            string side = left ? "left" : "right";
+            if (PartCache.TryGetValue(side, out var parts)) return parts;
+            parts = new Dictionary<string, PartGeometry>();
+            PartCache[side] = parts;
+            try
+            {
+                string root = FindRoot();
+                if (root == null) return parts;
+                string dir = Path.Combine(root, "frame_controller_" + side);
+                string prefix = "frame_controller_" + side + "_";
+                var ic = CultureInfo.InvariantCulture;
+                foreach (string file in Directory.GetFiles(dir, prefix + "*.obj"))
+                {
+                    string name = Path.GetFileNameWithoutExtension(file).Substring(prefix.Length);
+                    var pos = new List<Vector3>();
+                    Vector3 nsum = Vector3.zero;
+                    foreach (string raw in File.ReadLines(file))
+                    {
+                        if (raw.Length < 3 || raw[0] != 'v') continue;
+                        var t = raw.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (t.Length < 4) continue;
+                        var v = new Vector3(float.Parse(t[1], ic), float.Parse(t[2], ic), -float.Parse(t[3], ic));
+                        if (raw[1] == ' ') pos.Add(v);
+                        else if (raw[1] == 'n') nsum += v;
+                    }
+                    if (pos.Count == 0) continue;
+                    Vector3 c = Vector3.zero;
+                    foreach (var v in pos) c += v;
+                    parts[name] = new PartGeometry { Center = c / pos.Count, Normal = nsum.sqrMagnitude > 1e-8f ? nsum.normalized : Vector3.up, Vertices = pos.ToArray() };
+                }
+                Plugin.Log.LogInfo($"Steam Frame controller parts ({side}): {string.Join(", ", parts.Keys)}");
+            }
+            catch (Exception e) { Plugin.Log.LogWarning("Reading the controller parts failed: " + e.Message); }
+            return parts;
+        }
+
         static Material MakeMaterial(string dir, string side)
         {
             Shader sh = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");

@@ -38,7 +38,7 @@ namespace CozyMarblesVR
         const int AtlasSlots = 4;
 
         public enum Placement { Menu, GameHud, BuildFree, BuildAttached, Options, Overlay, Hidden }
-        public enum Widget { None, Bar, Corner, Settings, Info, Grab, Marble }
+        public enum Widget { None, Bar, Corner, Settings, Info, Grab, Marble, BuildResize, BuildTilt }
         enum Drag { None, Move, Scale }
 
         // ---------------------------------------------------------------- one floating panel
@@ -56,6 +56,7 @@ namespace CozyMarblesVR
             public bool Solid;              // the whole rectangle blocks the laser (no pointing "through" it)
             public bool HasWidgets;
             public bool ShowGear = true;
+            public float WidgetScale = 1f;  // the panel was pulled closer (and smaller): its handles shrink with it
             public RenderTexture Tex;
 
             public PanelView(string name, Transform parent)
@@ -103,13 +104,13 @@ namespace CozyMarblesVR
                 Mat.mainTextureOffset = offset;
 
                 // below the panel: round VR button, grip bar in the middle; small resize button at the lower right corner
-                float w = Crop.width * s;
+                float w = Crop.width * s, k = WidgetScale;
                 float cx = (Crop.center.x - Anchor.x) * s, bottom = (Crop.yMin - Anchor.y) * s;
-                float barW = Mathf.Clamp(w * 0.2f, 0.14f, 0.32f), barH = barW / 5f, y = bottom - 0.012f - barH * 0.5f;
-                float gear = Mathf.Max(0.042f, barH * 1.4f);
+                float barW = Mathf.Clamp(w * 0.2f, 0.14f * k, 0.32f * k), barH = barW / 5f, y = bottom - 0.012f * k - barH * 0.5f;
+                float gear = Mathf.Max(0.042f * k, barH * 1.4f);
                 SetWidget(Bar, HasWidgets, new Vector3(cx, y, 0f), new Vector3(barW, barH, 1f));
-                SetWidget(Gear, HasWidgets && ShowGear, new Vector3(cx - barW * 0.5f - 0.012f - gear * 0.5f, y, 0f), new Vector3(gear, gear, 1f));
-                SetWidget(Corner, HasWidgets, new Vector3(cx + w * 0.5f + 0.016f, bottom - 0.016f, 0f), new Vector3(0.03f, 0.03f, 1f));
+                SetWidget(Gear, HasWidgets && ShowGear, new Vector3(cx - barW * 0.5f - 0.012f * k - gear * 0.5f, y, 0f), new Vector3(gear, gear, 1f));
+                SetWidget(Corner, HasWidgets, new Vector3(cx + w * 0.5f + 0.016f * k, bottom - 0.016f * k, 0f), new Vector3(0.03f * k, 0.03f * k, 1f));
             }
 
             /// <summary>Laser hit on the picture: pixel in texture (= mouse) coordinates.</summary>
@@ -217,6 +218,8 @@ namespace CozyMarblesVR
         readonly PanelView _main, _build, _options, _overlay;
         readonly List<Tile> _tiles = new List<Tile>();
         readonly MiniButton _miniInfo, _miniVr, _miniGrab, _miniMarble;
+        readonly MiniButton[] _buildCtl;   // resize and tilt handles at the lower right corner of the build menu
+        static readonly Widget[] BuildCtlWidgets = { Widget.BuildResize, Widget.BuildTilt };
         MiniButton _hoverMini;
         RenderTexture _mainRt, _atlasRt, _overlayRt;
 
@@ -301,6 +304,11 @@ namespace CozyMarblesVR
             _miniVr = new MiniButton("CozyVR VR Button", "btn_vr", rig);
             _miniGrab = new MiniButton("CozyVR Grab Button", "toggle_mouse", rig) { Aspect = 2f };
             _miniMarble = new MiniButton("CozyVR Marble Button", "btn_marble", rig);
+            _buildCtl = new[]
+            {
+                new MiniButton("CozyVR Build Resize", "resize", rig),
+                new MiniButton("CozyVR Build Tilt", "build_tilt", rig),
+            };
         }
 
         /// <summary>Shows the current mode on the toggle: knob left on the mouse pointer, or right on the hand.</summary>
@@ -358,9 +366,13 @@ namespace CozyMarblesVR
                 m.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
                 m.SetFloat("_SrcBlendAlpha", (float)BlendMode.One);
                 m.SetFloat("_DstBlendAlpha", (float)BlendMode.OneMinusSrcAlpha);
-                m.SetFloat("_ZWrite", 0f);
+                // Panels write depth like any other object (so controller buttons behind a menu stay hidden behind
+                // it). Alpha clipping keeps the see-through parts of the picture from writing depth.
+                m.SetFloat("_ZWrite", 1f);
                 m.SetFloat("_Cull", (float)CullMode.Off);
-                m.SetFloat("_AlphaClip", 0f);
+                m.SetFloat("_AlphaClip", 1f);
+                m.SetFloat("_Cutoff", 0.04f);
+                m.EnableKeyword("_ALPHATEST_ON");
                 m.SetOverrideTag("RenderType", "Transparent");
                 m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
                 m.SetShaderPassEnabled("DepthOnly", false);
@@ -383,7 +395,9 @@ namespace CozyMarblesVR
                 useMipMap = true,
                 autoGenerateMips = true,
                 filterMode = FilterMode.Trilinear,
-                anisoLevel = 4,
+                anisoLevel = 8,
+                // the panels are seen at a slant and a little smaller than the texture: prefer the sharper mip level
+                mipMapBias = -0.6f,
                 antiAliasing = 1,
                 wrapMode = TextureWrapMode.Clamp
             };
@@ -471,6 +485,7 @@ namespace CozyMarblesVR
             _miniVr.Place(false, default, Quaternion.identity, 0f);
             _miniGrab.Place(false, default, Quaternion.identity, 0f);
             _miniMarble.Place(false, default, Quaternion.identity, 0f);
+            foreach (var b in _buildCtl) b.Place(false, default, Quaternion.identity, 0f);
 
             if (_uiCam != null)
             {
@@ -816,7 +831,7 @@ namespace CozyMarblesVR
         /// </summary>
         void LayoutBar()
         {
-            bool show = _build.Placement != Placement.Hidden;
+            bool show = false;   // the top bar and the mod buttons moved onto the controllers (ControllerDecor)
             if (!show)
             {
                 foreach (var t in _tiles) { t.View.Placement = Placement.Hidden; t.View.Apply(); }
@@ -862,6 +877,162 @@ namespace CozyMarblesVR
         }
 
         /// <summary>
+        /// Two handles just right of the lower right corner of the build menu on the hand: resize (at the corner) and
+        /// tilt (above it). Held with the trigger, the menu follows the laser: resize scales it about its lower edge,
+        /// tilt follows the turn of the pointing hand. They keep their size when the menu is scaled.
+        /// </summary>
+        void PlaceBuildControls()
+        {
+            bool show = _build.Placement == Placement.BuildAttached && (_handleDrag != HandleDrag.None || (ToolboxOpen() ?? _build.Crop.width > 220f));
+            if (_build.Placement != Placement.BuildAttached) EndHandleDrag();
+            if (!show)
+            {
+                foreach (var b in _buildCtl) b.Place(false, default, Quaternion.identity, 0f);
+                ShowReadout(false, default, default, null);
+                return;
+            }
+            const float size = 0.02f, gap = 0.005f;
+            float mpp = _build.MetersPerPixel;
+            float x = (_build.Crop.xMax - _build.Anchor.x) * mpp + gap + size * 0.5f;
+            float bottom = (_build.Crop.yMin - _build.Anchor.y) * mpp;
+            for (int i = 0; i < _buildCtl.Length; i++)
+            {
+                float y = bottom + size * 0.5f + i * (size + gap);   // 0 = resize at the corner, 1 = tilt above it
+                _buildCtl[i].Place(true, _build.Pos + _build.Rot * new Vector3(x, y, 0f), _build.Rot, size);
+            }
+            if (_handleDrag == HandleDrag.None) { ShowReadout(false, default, default, null); return; }
+            string text = _handleDrag == HandleDrag.Tilt ? (Mathf.Abs(_liveTilt) < 0.5f ? "0°" : $"{_liveTilt:+0;-0}°") : $"{_liveScale * 100f:0} %";
+            float ry = bottom + 2f * (size + gap) + 0.008f;
+            ShowReadout(true, _build.Pos + _build.Rot * new Vector3(x, ry, -0.002f), _build.Rot, text);
+        }
+
+        // ---------------------------------------------------------------- resize / tilt handles of the build menu
+
+        enum HandleDrag { None, Resize, Tilt }
+        HandleDrag _handleDrag;
+        float _liveScale, _liveTilt;            // values while a handle is held; written to the config on release
+        float _rawTilt;                         // tilt before the snap to 0
+        float _dragScale0, _dragTilt0, _dragAngle0, _lastHandAngle;
+        Vector3 _dragCorner0;                   // laser hit at the start, in the menu's frame (relative to its pose)
+        Vector3 _mountFwd, _mountFace;          // controller axes of the last placement (tilt 0 = up along _mountFwd)
+        bool _mountValid;
+        public const float MinAttachedScale = 0.12f, MaxAttachedScale = 0.6f, MaxAttachedTilt = 75f, TiltSnap = 5f;
+        /// <summary>
+        /// Soft snap to 0: within ±TiltSnap the menu stays flush with the ring, the next TiltSnap degrees catch up
+        /// with the hand (no jump), beyond that it follows 1:1.
+        /// </summary>
+        static float SnapTilt(float raw)
+        {
+            float a = Mathf.Abs(raw);
+            if (a <= TiltSnap) return 0f;
+            if (a < 2f * TiltSnap) return Mathf.Sign(raw) * (a - TiltSnap) * 2f;
+            return raw;
+        }
+        public bool HandleDragging => _handleDrag != HandleDrag.None;
+        public bool TiltDragging => _handleDrag == HandleDrag.Tilt;
+
+        /// <summary>Where the laser meets the build menu's plane while a handle is held (tracking space).</summary>
+        public Vector3 HandleDragPoint(Ray localRay)
+        {
+            var plane = new Plane(_build.Rot * Vector3.forward, _build.Pos);
+            return plane.Raycast(localRay, out float t) ? localRay.GetPoint(t) : localRay.GetPoint(0.3f);
+        }
+        GameObject _readout;
+        TMPro.TextMeshProUGUI _readoutText;
+
+        /// <summary>Direction of the laser as an angle in the controller's tilt plane (0 = along the tilt-0 "up").</summary>
+        float HandAngle(Vector3 dir) => Mathf.Atan2(Vector3.Dot(dir, -_mountFace), Vector3.Dot(dir, _mountFwd)) * Mathf.Rad2Deg;
+
+        bool BeginHandleDrag(Widget w, Ray localRay)
+        {
+            if (w != Widget.BuildResize && w != Widget.BuildTilt) return false;
+            var c = Plugin.Cfg;
+            _liveScale = _dragScale0 = Mathf.Clamp(c.AttachedScale.Value, MinAttachedScale, MaxAttachedScale);
+            _liveTilt = _rawTilt = _dragTilt0 = Mathf.Clamp(c.AttachedTilt.Value, -MaxAttachedTilt, MaxAttachedTilt);
+            if (w == Widget.BuildResize)
+            {
+                var plane = new Plane(_build.Rot * Vector3.forward, _build.Pos);
+                if (!plane.Raycast(localRay, out float t)) return true;
+                _dragCorner0 = Quaternion.Inverse(_build.Rot) * (localRay.GetPoint(t) - _build.Pos);
+                if (_dragCorner0.sqrMagnitude < 1e-4f) return true;
+                _handleDrag = HandleDrag.Resize;
+            }
+            else
+            {
+                if (!_mountValid) return true;
+                _dragAngle0 = HandAngle(localRay.direction);
+                _handleDrag = HandleDrag.Tilt;
+            }
+            return true;
+        }
+
+        void UpdateHandleDrag(Ray localRay)
+        {
+            if (_handleDrag == HandleDrag.Resize)
+            {
+                var plane = new Plane(_build.Rot * Vector3.forward, _build.Pos);
+                if (!plane.Raycast(localRay, out float t)) return;
+                Vector3 local = Quaternion.Inverse(_build.Rot) * (localRay.GetPoint(t) - _build.Pos);
+                // the menu grows about its lower edge centre, so the held corner stays under the laser
+                float k = Vector3.Dot(local, _dragCorner0) / _dragCorner0.sqrMagnitude;
+                _liveScale = Mathf.Clamp(_dragScale0 * k, MinAttachedScale, MaxAttachedScale);
+            }
+            else if (_handleDrag == HandleDrag.Tilt && _mountValid)
+            {
+                // the menu turns like the pointing hand: tip the hand back and the menu's top leans back as much
+                // (HandAngle grows when it leans back, the setting grows towards the viewer)
+                _lastHandAngle = HandAngle(localRay.direction);
+                float delta = Mathf.DeltaAngle(_dragAngle0, _lastHandAngle);
+                _rawTilt = Mathf.Clamp(_dragTilt0 - delta, -MaxAttachedTilt, MaxAttachedTilt);
+                _liveTilt = SnapTilt(_rawTilt);
+            }
+        }
+
+        void EndHandleDrag()
+        {
+            if (_handleDrag == HandleDrag.None) return;
+            var c = Plugin.Cfg;
+            if (_handleDrag == HandleDrag.Resize) c.AttachedScale.Value = Mathf.Round(_liveScale * 100f) / 100f;
+            else c.AttachedTilt.Value = Mathf.Round(_liveTilt);
+            _handleDrag = HandleDrag.None;
+        }
+
+        void ShowReadout(bool show, Vector3 pos, Quaternion rot, string text)
+        {
+            if (!show) { if (_readout != null && _readout.activeSelf) _readout.SetActive(false); return; }
+            if (_readout == null)
+            {
+                var font = VRSettingsPanel.FindFont();
+                if (font == null) return;
+                _readout = new GameObject("CozyVR Build Readout", typeof(RectTransform)) { layer = HudLayer };
+                var rt = (RectTransform)_readout.transform;
+                rt.SetParent(_build.Root.parent, false);
+                rt.sizeDelta = new Vector2(220f, 80f);
+                rt.localScale = Vector3.one * 0.00012f;
+                _readout.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+                var bg = VRSettingsPanel.NewRect("Background", rt, Vector2.zero, new Vector2(220f, 80f), new Vector2(0.5f, 0.5f));
+                bg.anchorMin = bg.anchorMax = new Vector2(0.5f, 0.5f);
+                bg.anchoredPosition = Vector2.zero;
+                var img = bg.gameObject.AddComponent<Image>();
+                img.sprite = VRSettingsPanel.UiSprite("ui_round_rect", true);
+                img.type = Image.Type.Sliced;
+                img.pixelsPerUnitMultiplier = 2.6f;
+                img.color = new Color(0.12f, 0.08f, 0.06f, 0.85f);
+                img.raycastTarget = false;
+                _readoutText = VRSettingsPanel.Text(rt, "", Vector2.zero, new Vector2(210f, 80f), 52f, TMPro.TextAlignmentOptions.Center, font, TMPro.FontStyles.Bold);
+                var trt = _readoutText.rectTransform;
+                trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 0.5f);
+                trt.anchoredPosition = Vector2.zero;
+                _readoutText.color = new Color(1f, 0.9f, 0.7f, 1f);
+                foreach (var tr in _readout.GetComponentsInChildren<Transform>(true)) tr.gameObject.layer = HudLayer;
+            }
+            if (!_readout.activeSelf) _readout.SetActive(true);
+            _readout.transform.localPosition = pos;
+            _readout.transform.localRotation = rot;
+            _readoutText.text = text;
+        }
+
+        /// <summary>
         /// World labels share their pixel range with the main UI. Only one of the two groups may answer the
         /// virtual mouse at a time: the one the laser is on.
         /// </summary>
@@ -896,6 +1067,9 @@ namespace CozyMarblesVR
                     gx0 = Mathf.Min(gx0, p.x); gy0 = Mathf.Min(gy0, p.y); gx1 = Mathf.Max(gx1, p.x); gy1 = Mathf.Max(gy1, p.y);
                 }
                 if (gx1 - gx0 > w * 0.95f && gy1 - gy0 > h * 0.9f) continue; // full-screen backgrounds
+                // small gadgets tucked into the right screen edge (the main menu's news/Twitch flap) would stretch the
+                // main panel over the whole width; they are left out of the picture
+                if (slot == 0 && gx1 - gx0 < 140f && gy1 - gy0 < 140f && gx1 > x1 - 140f) continue;
                 if (gx1 < x0 || gx0 > x1 || gy1 < 0f || gy0 > h) continue;   // off screen (slid away)
                 xMin = Mathf.Min(xMin, gx0); yMin = Mathf.Min(yMin, gy0); xMax = Mathf.Max(xMax, gx1); yMax = Mathf.Max(yMax, gy1);
             }
@@ -987,16 +1161,151 @@ namespace CozyMarblesVR
             _main.MetersPerPixel = width / TextureWidth;
         }
 
-        void PlaceBuild(Placement p, HandState hand)
+        float _mainPull = 1f, _lastNearest = 1f;
+        string _lastHitName = "-";
+        Vector3 _lastHead;
+
+        /// <summary>
+        /// Panels are ordinary objects in the room now, so scenery between you and the main menu (the marble run in
+        /// the main menu's room, a tall tower in a level) would cover it. The panel is pulled towards you until it
+        /// stands in front of it; it shrinks by the same factor, so it keeps its apparent size.
+        /// </summary>
+        void KeepInFrontOfScenery(PanelView v, Vector3 head)
+        {
+            _lastHead = head;
+            _mainBaseValid = v.Visible && v.Crop.width >= 2f && v.Crop.height >= 2f;
+            if (!_mainBaseValid) { _mainPull = 1f; v.WidgetScale = 1f; return; }
+            _mainBasePos = v.Pos; _mainBaseMpp = v.MetersPerPixel;
+            float nearest = NearestObstacle(head, Vector3.zero, 0f);
+            _lastNearest = nearest;
+            // a gap in front of the obstacle; never closer than 40 % of the way
+            float want = nearest < 1f ? Mathf.Max(0.4f, nearest * 0.9f) : 1f;
+            // move in at once, back out slowly (no pumping when something passes by)
+            _mainPull = want < _mainPull ? want : Mathf.MoveTowards(_mainPull, want, Time.unscaledDeltaTime * 0.5f);
+            v.WidgetScale = Mathf.Min(1f, _mainPull);
+            if (_mainPull >= 0.999f) return;
+            v.Pos = head + (v.Pos - head) * _mainPull;
+            v.MetersPerPixel = _mainBaseMpp * _mainPull;
+        }
+
+        Vector3 _mainBasePos;
+        float _mainBaseMpp;
+        bool _mainBaseValid;
+
+        /// <summary>The main menu stands as a menu in front of you (the case the menu viewpoint cares about).</summary>
+        public Vector3 MainBasePos => _mainBasePos;
+        public bool MainIsMenu => _mainBaseValid && _main.Placement == Placement.Menu && _dragPanel != _main;
+
+        /// <summary>Horizontal direction from the head to the main menu (tracking space).</summary>
+        public Vector3 MainDirection(Vector3 head)
+        {
+            Vector3 d = _mainBasePos - head; d.y = 0f;
+            return d.sqrMagnitude > 1e-6f ? d.normalized : Vector3.forward;
+        }
+
+        /// <summary>
+        /// How far along the view rays to the (unpulled) main menu the nearest obstacle is: 1 = free.
+        /// <paramref name="shift"/> moves eye and panel together (tracking space) to test another viewpoint;
+        /// <paramref name="behind"/> also wants that much free space behind the panel (metres).
+        /// </summary>
+        public float NearestObstacle(Vector3 head, Vector3 shift, float behind)
+        {
+            if (!_mainBaseValid) return 1f;
+            var v = _main;
+            float s = _mainBaseMpp;
+            Vector3 center = _mainBasePos + v.Rot * new Vector3((v.Crop.center.x - v.Anchor.x) * s, (v.Crop.center.y - v.Anchor.y) * s, 0f);
+            Vector3 right = v.Rot * Vector3.right * (v.Crop.width * s * 0.5f);
+            Vector3 up = v.Rot * Vector3.up * (v.Crop.height * s * 0.5f);
+            // the bar and buttons underneath belong to the panel too
+            center -= v.Rot * Vector3.up * 0.03f;
+            up += v.Rot * Vector3.up * 0.03f;
+            Vector3 eye = _rig.TransformPoint(head + shift);
+            // thin rays slip past pipes and posts: sweep a small sphere (2 cm at the panel, in world units)
+            float radius = 0.02f * _rig.lossyScale.x;
+            float nearest = 1f;
+            for (int ix = -2; ix <= 2; ix++)
+            for (int iy = -2; iy <= 2; iy++)
+            {
+                Vector3 target = _rig.TransformPoint(center + shift + right * (ix * 0.5f) + up * (iy * 0.5f));
+                Vector3 d = target - eye;
+                float len = d.magnitude;
+                if (len < 1e-4f) continue;
+                float reach = len * (1f + behind / Mathf.Max(0.05f, (center - head).magnitude));
+                if (StaticHit(eye, radius, d / len, reach, out float dist, out string what) && dist / len < nearest)
+                {
+                    // a hit just behind the panel (within the wanted gap) still counts as "not free"
+                    nearest = Mathf.Min(dist / len, 0.999f);
+                    _lastHitName = what;
+                }
+            }
+            return nearest;
+        }
+
+        /// <summary>Can you get from the head to the shifted head without passing through anything?</summary>
+        public bool PathFree(Vector3 head, Vector3 shift)
+        {
+            Vector3 a = _rig.TransformPoint(head), b = _rig.TransformPoint(head + shift);
+            Vector3 d = b - a;
+            float len = d.magnitude;
+            if (len < 1e-4f) return true;
+            float r = 0.1f * _rig.lossyScale.x;
+            // both ways: one-sided mesh colliders (walls) are only hit from their front
+            return !StaticHit(a, r, d / len, len + r, out _, out _) && !StaticHit(b, r, -d / len, len + r, out _, out _);
+        }
+
+        readonly RaycastHit[] _sceneryHits = new RaycastHit[32];
+
+        /// <summary>Nearest hit of a sphere sweep against fixed scenery; rolling marbles and other moving bodies do not count.</summary>
+        bool StaticHit(Vector3 origin, float radius, Vector3 dir, float reach, out float dist, out string what)
+        {
+            dist = float.MaxValue; what = null;
+            int n = Physics.SphereCastNonAlloc(origin, radius, dir, _sceneryHits, reach, SceneryMask, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n; i++)
+            {
+                var h = _sceneryHits[i];
+                if (h.distance <= 0f && h.point == Vector3.zero) continue;   // already overlapping at the start
+                if (h.collider.bounds.Contains(origin)) continue;            // volumes you are inside of (level bounds)
+                var body = h.collider.attachedRigidbody;
+                if (body != null && !body.isKinematic) continue;
+                if (h.distance < dist) { dist = h.distance; what = h.collider.name; }
+            }
+            return what != null;
+        }
+
+        static int SceneryMask => ~((1 << HudLayer) | (1 << 2));
+
+        void PlaceBuild(Placement p, HandState hand, Vector3 head)
         {
             var c = Plugin.Cfg;
-            if (p == Placement.BuildAttached)
+            var decor = VRManager.Instance != null ? VRManager.Instance.Decor : null;
+            if (p == Placement.BuildAttached && decor != null && decor.TryGetMount(hand, out Vector3 mount, out Vector3 fwd, out Vector3 face))
             {
-                // the toolbox sits a few centimetres above the controller, tilted towards you
-                _build.MetersPerPixel = Mathf.Clamp(c.AttachedScale.Value, 0.05f, 2f) / 1000f;
-                Quaternion rot = hand.GripRot * Quaternion.Euler(c.AttachedTilt.Value, 0f, 0f);
+                // fixed to the controller like a tablet whose handle is the controller: it moves and turns with it.
+                // Its lower edge sits just beyond the round buttons, it continues the controller's face (the side with
+                // the buttons faces you); [HUD.BuildMenu] AttachedTiltTowardsYou turns it about its lower edge (positive = towards you).
+                bool live = _handleDrag != HandleDrag.None;
+                _build.MetersPerPixel = (live ? _liveScale : Mathf.Clamp(c.AttachedScale.Value, 0.05f, 2f)) / 1000f;
+                float tilt = -(live ? _liveTilt : Mathf.Clamp(c.AttachedTilt.Value, -MaxAttachedTilt, MaxAttachedTilt)) * Mathf.Deg2Rad;   // the formula below: positive = top leans back
+                _mountFwd = fwd; _mountFace = face; _mountValid = true;
+                Vector3 up = fwd * Mathf.Cos(tilt) - face * Mathf.Sin(tilt);
+                Vector3 towardsViewer = face * Mathf.Cos(tilt) + fwd * Mathf.Sin(tilt);
+                Quaternion rot = Quaternion.LookRotation(-towardsViewer, up);
                 float lift = (_build.Anchor.y - _build.Crop.yMin) * _build.MetersPerPixel;
-                _build.Pos = hand.GripPos + hand.GripRot * new Vector3(0f, 0.06f, 0.03f) + rot * new Vector3(0f, lift, 0f);
+                _build.Pos = mount + rot * new Vector3(0f, lift, 0f);
+                _build.Rot = rot;
+            }
+            else if (p == Placement.BuildAttached)
+            {
+                // the toolbox floats a few centimetres above the controller, upright and turned towards you
+                // (independent of how the grip pose is oriented, so it can never end up turned sideways)
+                _build.MetersPerPixel = Mathf.Clamp(c.AttachedScale.Value, 0.05f, 2f) / 1000f;
+                Vector3 basePos = hand.GripPos + Vector3.up * 0.075f;
+                Vector3 look = basePos - head;
+                look.y = Mathf.Min(look.y, 0f) * 0.5f;                       // a little tilted back when below the eyes
+                Quaternion rot = look.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(look.normalized, Vector3.up) : Quaternion.identity;
+                rot *= Quaternion.Euler(Mathf.Clamp(c.AttachedTilt.Value, -45f, 45f) * 0.5f, 0f, 0f);
+                float lift = (_build.Anchor.y - _build.Crop.yMin) * _build.MetersPerPixel;
+                _build.Pos = basePos + rot * new Vector3(0f, lift, 0f);
                 _build.Rot = rot;
             }
             else
@@ -1039,6 +1348,98 @@ namespace CozyMarblesVR
             _buttonPrev = held;
         }
 
+        bool _optionsHidden, _carryPrev;
+        bool _toolboxWasOpen;
+        float _toolboxWait;
+
+        /// <summary>
+        /// Shown build menu = open toolbox. Opens the game's toolbox when the build menu is shown; closing it with
+        /// its own arrow button hides the build menu (X or the ring button bring it back).
+        /// </summary>
+        void KeepToolboxInSync(bool inMenu)
+        {
+            if (inMenu || Time.unscaledTime < _toolboxWait) return;
+            bool? open = ToolboxOpen();
+            if (!open.HasValue) return;
+            if (!_menuHidden && !open.Value)
+            {
+                if (_toolboxWasOpen) _menuHidden = true;          // closed by the player
+                else { SyncToolbox(true); _toolboxWait = Time.unscaledTime + 0.8f; }
+            }
+            _toolboxWasOpen = open.Value;
+        }
+
+        /// <summary>Something is selected (its object options exist).</summary>
+        public bool HasSelection { get; private set; }
+
+        /// <summary>The in-game menu (top bar, build menu, mod buttons) is folded away.</summary>
+        public bool MenuHidden => _menuHidden;
+
+        public void ToggleIngameMenu() { _menuHidden = !_menuHidden; if (!_menuHidden) SyncToolbox(true); }
+        public void ShowIngameMenu() { _menuHidden = false; SyncToolbox(true); }
+
+        /// <summary>Hides the main menu panel (the VR settings take its place).</summary>
+        public bool HideMain;
+
+        /// <summary>
+        /// Presses the game's own control in one of the former top-bar tiles ("racing", "camreset", ...): buttons are
+        /// clicked, toggles flipped. False if it is not there.
+        /// </summary>
+        public bool ClickTile(string name)
+        {
+            foreach (var tile in _tiles)
+            {
+                if (tile.Name != name) continue;
+                foreach (var src in tile.Srcs)
+                {
+                    if (src == null) continue;
+                    var tg = src.GetComponentInChildren<Toggle>(true);
+                    if (tg != null && tg.interactable) { tg.isOn = !tg.isOn; return true; }
+                    var bt = src.GetComponentInChildren<Button>(true);
+                    if (bt != null && bt.interactable) { bt.onClick.Invoke(); return true; }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>On/off state of a toggle in a former top-bar tile, or null.</summary>
+        public bool? TileToggle(string name)
+        {
+            foreach (var tile in _tiles)
+                if (tile.Name == name)
+                    foreach (var src in tile.Srcs)
+                    {
+                        var tg = src != null ? src.GetComponentInChildren<Toggle>(true) : null;
+                        if (tg != null) return tg.isOn;
+                    }
+            return null;
+        }
+
+        /// <summary>The build menu is shown (X / ring button).</summary>
+        public bool BuildShown => !_menuHidden;
+
+        /// <summary>Centre of the main menu panel (tracking space) and its size, for the VR settings that replace it.</summary>
+        public Vector3 MainCenter => _main.Root.localPosition + _main.Root.localRotation * _main.Quad.localPosition;
+
+        /// <summary>Shows / hides the options panel of the selected object.</summary>
+        public void ToggleOptions() { _optionsHidden = !_optionsHidden; }
+
+        /// <summary>
+        /// Off-hand grip: while held, the in-game menu follows the hand (it is shown if it was folded away);
+        /// on release it stays where it is.
+        /// </summary>
+        public void CarryMenu(bool held, bool inMenu)
+        {
+            if (inMenu) held = false;
+            if (held && !_carryPrev) { _menuHidden = false; _holding = true; }
+            if (!held && _carryPrev)
+            {
+                if (_holding && !Plugin.Cfg.AlwaysAttached.Value) StoreFramePose(Placement.BuildFree, _build.Pos, _build.Rot, _build.MetersPerPixel);
+                _holding = false;
+            }
+            _carryPrev = held;
+        }
+
         public void Tick(Tracking tracking, HandState offHand, bool inMenu)
         {
             if (!Active) return;
@@ -1067,28 +1468,37 @@ namespace CozyMarblesVR
                 // the options panel hangs from its lower edge centre, which sits above the selected object
                 _options.Anchor = new Vector2(_options.Crop.center.x, _options.Crop.yMin);
                 _mainGameCrop = ComputeCrop(_mainCanvases, _uiCam, 0);
+                KeepToolboxInSync(inMenu);
                 UpdateTiles();
             }
-            // menus show the whole picture; during play only what is really on screen (tutorial popups, race list ...)
-            _main.Crop = inMenu ? new Rect(0f, 0f, w, h) : _mainGameCrop;
+            // only what is really on screen: in menus the menu itself (plus an open dialog), during play tutorial
+            // popups, race list ... The panel is centred on that content, not on the whole virtual desktop.
+            Rect content = _mainGameCrop;
+            if (inMenu && (content.width < 40f || content.height < 40f)) content = new Rect(0f, 0f, w, h);
+            _main.Crop = content;
+            if (inMenu) _main.Anchor = content.center;
 
-            Placement main = inMenu ? Placement.Menu : Placement.GameHud;
+            Placement main = inMenu ? (HideMain ? Placement.Hidden : Placement.Menu) : Placement.GameHud;
+            // the build menu floats above the off-hand controller
             Placement build;
-            if (inMenu || (Plugin.Cfg.AlwaysAttached.Value && _menuHidden)) build = Placement.Hidden;
-            else if ((Plugin.Cfg.AlwaysAttached.Value || _holding) && offHand.Valid) build = Placement.BuildAttached;
+            if (inMenu || _menuHidden) build = Placement.Hidden;
+            else if (offHand.Valid) build = Placement.BuildAttached;
             else build = Placement.BuildFree;
 
             if ((_dragPanel == _main && main != _main.Placement) || (_dragPanel == _build && build != _build.Placement)) EndDrag(save: false);
             _main.Placement = main;
             _build.Placement = build;
             _main.HasWidgets = true;
-            _build.HasWidgets = build == Placement.BuildFree;
+            _build.HasWidgets = false;
 
-            if (_dragPanel != _main) PlaceMain(main);
-            if (_dragPanel != _build && build != Placement.Hidden) PlaceBuild(build, offHand);
+            if (_dragPanel != _main) { PlaceMain(main); KeepInFrontOfScenery(_main, tracking.HeadPos); }
+            if (_dragPanel != _build && build != Placement.Hidden) PlaceBuild(build, offHand, tracking.HeadPos);
             // object options: above the selected object(s), always turned towards you
             Vector3 top = default;
-            _options.Placement = !inMenu && TrySelectionTop(out top, out float objectSize) ? Placement.Options : Placement.Hidden;
+            bool selection = !inMenu && TrySelectionTop(out top, out float objectSize);
+            if (!selection) _optionsHidden = false;     // a new selection shows its options again
+            HasSelection = selection;
+            _options.Placement = selection && !_optionsHidden ? Placement.Options : Placement.Hidden;
             _options.HasWidgets = false;
             if (_options.Placement == Placement.Options)
             {
@@ -1112,26 +1522,203 @@ namespace CozyMarblesVR
 
             _main.Apply();
             _build.Apply();
+            PlaceBuildControls();
             LayoutBar();
             _options.Apply();
-            _overlay.Apply();
         }
 
-        /// <summary>World labels lie on the game's virtual screen (see VRShim), pushed out to a comfortable distance.</summary>
+        // ---------------------------------------------------------------- world labels
+
+        /// <summary>One label (or a cluster of touching labels) cut out of the label texture, shown at its object.</summary>
+        class LabelPiece
+        {
+            public readonly Transform Quad;
+            public readonly Material Mat;
+            public Rect Crop;
+
+            public LabelPiece(Transform parent)
+            {
+                Mat = CreateMaterial();
+                Quad = MakeQuad("CozyVR Label", Mat, parent);
+            }
+
+            public void Show(RenderTexture tex, Rect crop, Vector3 pos, Quaternion rot, float metersPerPixel)
+            {
+                Crop = crop;
+                if (Mat.mainTexture != tex) { Mat.mainTexture = tex; if (Mat.HasProperty("_BaseMap")) Mat.SetTexture("_BaseMap", tex); }
+                var scale = new Vector2(crop.width / tex.width, crop.height / tex.height);
+                var offset = new Vector2(crop.xMin / tex.width, crop.yMin / tex.height);
+                if (Mat.HasProperty("_BaseMap")) { Mat.SetTextureScale("_BaseMap", scale); Mat.SetTextureOffset("_BaseMap", offset); }
+                Mat.mainTextureScale = scale;
+                Mat.mainTextureOffset = offset;
+                Quad.localPosition = pos;
+                Quad.localRotation = rot;
+                Quad.localScale = new Vector3(crop.width * metersPerPixel, crop.height * metersPerPixel, 1f);
+                if (!Quad.gameObject.activeSelf) Quad.gameObject.SetActive(true);
+            }
+
+            public bool Raycast(Ray ray, out Vector2 pixel, out Vector3 point, out float dist)
+            {
+                pixel = default; point = default; dist = float.MaxValue;
+                if (!Quad.gameObject.activeInHierarchy) return false;
+                Vector3 n = Quad.forward;
+                float denom = Vector3.Dot(ray.direction, n);
+                if (Mathf.Abs(denom) < 1e-4f) return false;
+                float t = Vector3.Dot(Quad.position - ray.origin, n) / denom;
+                if (t <= 0f) return false;
+                point = ray.origin + ray.direction * t;
+                Vector3 local = Quad.InverseTransformPoint(point);
+                if (Mathf.Abs(local.x) > 0.5f || Mathf.Abs(local.y) > 0.5f) return false;
+                dist = t;
+                pixel = new Vector2(Crop.xMin + (local.x + 0.5f) * Crop.width, Crop.yMin + (local.y + 0.5f) * Crop.height);
+                return true;
+            }
+        }
+
+        readonly List<LabelPiece> _labelPieces = new List<LabelPiece>();
+        readonly List<Rect> _labelRects = new List<Rect>();
+        readonly List<Graphic> _graphicBuffer = new List<Graphic>();
+        readonly Vector3[] _cornerBuffer = new Vector3[4];
+        readonly Vector3[] _projWorld = new Vector3[VRShim.ProjectionCapacity];
+        readonly Vector3[] _projScreen = new Vector3[VRShim.ProjectionCapacity];
+        int _projCount, _projFrame = -1;
+        int _labelsShown;
+        public int LabelCount => _labelsShown;
+
+        /// <summary>
+        /// The game draws its labels on the (virtual) screen at the projection of a world point. In VR each label
+        /// is cut out of that picture and put back into the room at the depth of its object, so both eyes see it
+        /// where the object is. The world point comes from the game's own WorldToScreenPoint call (VRShim records
+        /// them); labels without one are placed on whatever the view ray through them hits.
+        /// </summary>
         public void PlaceOverlay()
         {
-            if (_overlay.Placement != Placement.Overlay || VRShim.ScreenWidth < 1f) return;
-            const float distance = 0.9f; // metres in front of the eyes
+            if (Time.frameCount != _projFrame)
+            {
+                _projFrame = Time.frameCount;
+                _projCount = VRShim.ProjectedCount;
+                System.Array.Copy(VRShim.ProjectedWorld, _projWorld, _projCount);
+                System.Array.Copy(VRShim.ProjectedScreen, _projScreen, _projCount);
+                VRShim.ProjectedCount = 0;
+            }
+
+            // the picture of the old single layer is never shown; its root holds the pieces
+            var root = _overlay.Root;
+            bool show = _overlay.Placement == Placement.Overlay && _overlayRt != null && VRShim.ScreenWidth >= 1f;
+            if (root.gameObject.activeSelf != show) root.gameObject.SetActive(show);
+            _labelsShown = 0;
+            if (show)
+            {
+                root.localPosition = Vector3.zero;
+                root.localRotation = Quaternion.identity;
+                root.localScale = Vector3.one;
+                foreach (var t in new[] { _overlay.Quad, _overlay.Bar, _overlay.Corner, _overlay.Gear })
+                    if (t.gameObject.activeSelf) t.gameObject.SetActive(false);
+                LayoutLabels(root);
+            }
+            for (int i = _labelsShown; i < _labelPieces.Count; i++)
+                if (_labelPieces[i].Quad.gameObject.activeSelf) _labelPieces[i].Quad.gameObject.SetActive(false);
+        }
+
+        void CollectLabelRects()
+        {
+            _labelRects.Clear();
+            if (_overlayCam == null) return;
+            int w = TextureWidth, h = TextureHeight;
+            foreach (var canvas in _overlayCanvases)
+            {
+                if (canvas == null || !canvas.enabled || !canvas.gameObject.activeInHierarchy) continue;
+                canvas.GetComponentsInChildren(false, _graphicBuffer);
+                foreach (var g in _graphicBuffer)
+                {
+                    if (!g.enabled || g.color.a < 0.02f || g.canvasRenderer.cull || g.canvasRenderer.GetInheritedAlpha() < 0.02f) continue;
+                    g.rectTransform.GetWorldCorners(_cornerBuffer);
+                    float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
+                    for (int i = 0; i < 4; i++)
+                    {
+                        Vector2 p = RectTransformUtility.WorldToScreenPoint(_overlayCam, _cornerBuffer[i]);
+                        x0 = Mathf.Min(x0, p.x); y0 = Mathf.Min(y0, p.y); x1 = Mathf.Max(x1, p.x); y1 = Mathf.Max(y1, p.y);
+                    }
+                    if (x1 - x0 < 1f || y1 - y0 < 1f) continue;
+                    if (x1 - x0 > w * 0.95f && y1 - y0 > h * 0.9f) continue;   // full-screen backgrounds
+                    if (x1 < 0f || x0 > w || y1 < 0f || y0 > h) continue;      // off screen
+                    // a little margin: the label may move a bit between this layout and the texture's next render
+                    const float pad = 10f;
+                    var r = Rect.MinMaxRect(Mathf.Max(0f, Mathf.Floor(x0 - pad)), Mathf.Max(0f, Mathf.Floor(y0 - pad)),
+                                            Mathf.Min(w, Mathf.Ceil(x1 + pad)), Mathf.Min(h, Mathf.Ceil(y1 + pad)));
+                    // merge with every rectangle it touches (a label's text, frame and buttons become one piece)
+                    for (int i = _labelRects.Count - 1; i >= 0; i--)
+                    {
+                        if (!_labelRects[i].Overlaps(r)) continue;
+                        var o = _labelRects[i];
+                        r = Rect.MinMaxRect(Mathf.Min(r.xMin, o.xMin), Mathf.Min(r.yMin, o.yMin), Mathf.Max(r.xMax, o.xMax), Mathf.Max(r.yMax, o.yMax));
+                        _labelRects.RemoveAt(i);
+                        i = _labelRects.Count;   // the grown rectangle may now touch others: start over
+                    }
+                    _labelRects.Add(r);
+                }
+            }
+        }
+
+        void LayoutLabels(Transform parent)
+        {
+            CollectLabelRects();
+            if (_labelRects.Count == 0) return;
             Vector3 eye = _rig.InverseTransformPoint(VRShim.EyePosition);
             Vector3 n = _rig.InverseTransformDirection(VRShim.ScreenNormal).normalized;
             Vector3 up = _rig.InverseTransformDirection(VRShim.ScreenUp).normalized;
             if (n.sqrMagnitude < 0.5f || up.sqrMagnitude < 0.5f) return;
-            // width of the virtual screen at 1 world unit, converted to this distance
+            Quaternion rot = Quaternion.LookRotation(n, up);
+            // width of the virtual screen at 1 unit of depth
             float widthAtOne = VRShim.ScreenRight.magnitude * VRShim.ScreenWidth;
-            _overlay.Rot = Quaternion.LookRotation(n, up);
-            _overlay.Pos = eye + n * distance;
-            _overlay.MetersPerPixel = widthAtOne * distance / VRShim.ScreenWidth;
-            _overlay.Apply();
+            float rigScale = Mathf.Max(1e-4f, _rig.lossyScale.x);
+            int mask = ~(1 << HudLayer);
+
+            foreach (var r in _labelRects)
+            {
+                // which projected world point belongs to this label: the nearest one in or just around it
+                float margin = Mathf.Max(24f, r.height * 0.6f);
+                var near = new Rect(r.xMin - margin, r.yMin - margin, r.width + 2f * margin, r.height + 2f * margin);
+                int best = -1; float bestD = float.MaxValue;
+                for (int i = 0; i < _projCount; i++)
+                {
+                    Vector2 s = _projScreen[i];
+                    if (!near.Contains(s)) continue;
+                    float d = (s - r.center).sqrMagnitude;
+                    if (d < bestD) { bestD = d; best = i; }
+                }
+
+                float depth;   // metres along the screen normal
+                if (best >= 0)
+                    depth = Vector3.Dot(_rig.InverseTransformPoint(_projWorld[best]) - eye, n);
+                else if (Physics.Raycast(VRShim.ScreenPointToWorldRay(r.center), out RaycastHit hit, 5000f, mask, QueryTriggerInteraction.Ignore))
+                    depth = Vector3.Dot(_rig.InverseTransformPoint(hit.point) - eye, n);
+                else
+                    depth = 0.9f;
+                // a touch towards the viewer, so the label does not sink into its own object
+                depth = Mathf.Max(0.2f, depth - Mathf.Min(0.04f, depth * 0.04f));
+
+                Vector3 onScreen = VRShim.ScreenOrigin + VRShim.ScreenRight * r.center.x + VRShim.ScreenUp * r.center.y;
+                Vector3 dir = _rig.InverseTransformDirection(onScreen - VRShim.EyePosition) / rigScale;
+                float along = Vector3.Dot(dir, n);
+                if (along < 1e-4f) continue;
+                Vector3 pos = eye + dir * (depth / along);
+
+                if (_labelsShown >= _labelPieces.Count) _labelPieces.Add(new LabelPiece(parent));
+                _labelPieces[_labelsShown++].Show(_overlayRt, r, pos, rot, widthAtOne * depth / VRShim.ScreenWidth);
+            }
+        }
+
+        bool RaycastLabels(Ray ray, out Vector2 pixel, out Vector3 point, out float dist)
+        {
+            pixel = default; point = default; dist = float.MaxValue;
+            bool any = false;
+            for (int i = 0; i < _labelsShown; i++)
+            {
+                if (_labelPieces[i].Raycast(ray, out Vector2 p, out Vector3 w, out float d) && d < dist)
+                { pixel = p; point = w; dist = d; any = true; }
+            }
+            return any;
         }
 
         static readonly System.Type OptionsUiType = System.Type.GetType("TimR.StructureOptions.StructureOptionsUi, Assembly-CSharp");
@@ -1203,6 +1790,8 @@ namespace CozyMarblesVR
                 if (HitQuad(_miniVr.Quad, worldRay, out Vector3 h4, out float d4) && d4 < dist) { best = Widget.Settings; hit = h4; dist = d4; panel = null; mini = _miniVr; }
                 if (HitQuad(_miniGrab.Quad, worldRay, out Vector3 h5, out float d5) && d5 < dist) { best = Widget.Grab; hit = h5; dist = d5; panel = null; mini = _miniGrab; }
                 if (HitQuad(_miniMarble.Quad, worldRay, out Vector3 h6, out float d6) && d6 < dist) { best = Widget.Marble; hit = h6; dist = d6; panel = null; mini = _miniMarble; }
+                for (int i = 0; i < _buildCtl.Length; i++)
+                    if (HitQuad(_buildCtl[i].Quad, worldRay, out Vector3 h7, out float d7) && d7 < dist) { best = BuildCtlWidgets[i]; hit = h7; dist = d7; panel = null; mini = _buildCtl[i]; }
             }
             _hoverPanel = panel;
             _hoverMini = mini;
@@ -1218,12 +1807,15 @@ namespace CozyMarblesVR
             _miniVr.SetHover(_hoverMini == _miniVr && w == Widget.Settings);
             _miniGrab.SetHover(_hoverMini == _miniGrab && w == Widget.Grab);
             _miniMarble.SetHover(_hoverMini == _miniMarble && w == Widget.Marble);
+            for (int i = 0; i < _buildCtl.Length; i++)
+                _buildCtl[i].SetHover((_hoverMini == _buildCtl[i] && w == BuildCtlWidgets[i]) || (int)_handleDrag == i + 1);
             if (w != Widget.None && _hoverPanel != null) _focus = _hoverPanel;
         }
 
         /// <summary>Starts moving or scaling the hovered panel with the laser (local = tracking-space ray).</summary>
         public void BeginDrag(Widget w, Ray localRay)
         {
+            if (BeginHandleDrag(w, localRay)) return;
             var p = _hoverPanel ?? _main;
             _focus = p;
             Vector3 center = p.Pos + p.Rot * p.Quad.localPosition;
@@ -1247,6 +1839,7 @@ namespace CozyMarblesVR
 
         public void UpdateDrag(Ray localRay, Vector3 headPos, float stickY, float dt)
         {
+            if (_handleDrag != HandleDrag.None) { UpdateHandleDrag(localRay); return; }
             var p = _dragPanel;
             if (p == null) return;
             if (_drag == Drag.Move)
@@ -1276,6 +1869,7 @@ namespace CozyMarblesVR
 
         public void EndDrag(bool save = true)
         {
+            EndHandleDrag();
             if (_drag != Drag.None && save && _dragPanel != null) StoreFramePose(_dragPanel.Placement, _dragPanel.Pos, _dragPanel.Rot, _dragPanel.MetersPerPixel);
             _drag = Drag.None;
             _dragPanel = null;
@@ -1347,7 +1941,7 @@ namespace CozyMarblesVR
             }
 
             // 2) world labels: only where an actual label/button is
-            if (_overlay.Raycast(ray, out Vector2 op, out Vector3 ow, out bool oi, out float od) && oi && (!hMain || !mi || od < md))
+            if (RaycastLabels(ray, out Vector2 op, out Vector3 ow, out float od) && (!hMain || !mi || od < md))
             {
                 SetOverlayTarget(true);
                 if (IsOverUi(op))
@@ -1480,22 +2074,53 @@ namespace CozyMarblesVR
         };
 
         /// <summary>World position of a point on a panel's widgets (diagnostics): bar, corner, vr; build panel with "b" prefix.</summary>
-        public Vector3 DebugWidgetPoint(string name)
+        public Transform RigTransform => _build.Root.parent;
+
+        /// <summary>World position of a widget and its rotation relative to the rig (diagnostics).</summary>
+        public Vector3 DebugWidgetPoint(string name, out Quaternion rigRot)
         {
-            if (name == "info") return _miniInfo.Quad.position;
-            if (name == "mvr") return _miniVr.Quad.position;
-            if (name == "mgrab") return _miniGrab.Quad.position;
-            if (name == "mmarble") return _miniMarble.Quad.position;
-            foreach (var tile in _tiles) if (name == "tile" + tile.Name) return tile.View.Quad.position;
+            var t = DebugWidget(name);
+            var rig = RigTransform;
+            rigRot = rig != null ? Quaternion.Inverse(rig.rotation) * t.rotation : t.rotation;
+            return t.position;
+        }
+
+        Transform DebugWidget(string name)
+        {
+            if (name == "info") return _miniInfo.Quad;
+            for (int i = 0; i < _buildCtl.Length; i++) if (name == "bctl" + i) return _buildCtl[i].Quad;
+            if (name == "mvr") return _miniVr.Quad;
+            if (name == "mgrab") return _miniGrab.Quad;
+            if (name == "mmarble") return _miniMarble.Quad;
+            foreach (var tile in _tiles) if (name == "tile" + tile.Name) return tile.View.Quad;
             var p = name.StartsWith("b") ? _build : _main;
             string n = name.StartsWith("b") ? name.Substring(1) : name;
-            Transform t = n == "bar" ? p.Bar : n == "corner" ? p.Corner : p.Gear;
-            return t.position;
+            return n == "bar" ? p.Bar : n == "corner" ? p.Corner : p.Gear;
+        }
+
+        /// <summary>Diagnostics: graphics of the main UI right of the given x (texture pixels) that widen the crop.</summary>
+        public string DebugMainGraphics(float minX)
+        {
+            var sb = new System.Text.StringBuilder("[diag] main graphics right of " + minX + ":\n");
+            var corners = new Vector3[4];
+            int w = TextureWidth, h = TextureHeight;
+            foreach (var canvas in _mainCanvases)
+            foreach (var g in (canvas != null && canvas.gameObject.activeInHierarchy && canvas.enabled) ? canvas.GetComponentsInChildren<Graphic>(false) : new Graphic[0])
+            {
+                if (!g.enabled || g.color.a < 0.02f || g.canvasRenderer.cull || g.canvasRenderer.GetInheritedAlpha() < 0.02f) continue;
+                g.rectTransform.GetWorldCorners(corners);
+                float x0 = float.MaxValue, x1 = float.MinValue, y0 = float.MaxValue, y1 = float.MinValue;
+                for (int i = 0; i < 4; i++) { Vector2 p = RectTransformUtility.WorldToScreenPoint(_uiCam, corners[i]); x0 = Mathf.Min(x0, p.x); x1 = Mathf.Max(x1, p.x); y0 = Mathf.Min(y0, p.y); y1 = Mathf.Max(y1, p.y); }
+                if (x1 - x0 > w * 0.95f && y1 - y0 > h * 0.9f) continue;
+                if (x1 < minX) continue;
+                sb.AppendLine($"  {canvas.name}/{g.name} ({g.GetType().Name}) x={x0:0}..{x1:0} y={y0:0}..{y1:0} a={g.color.a:0.00}");
+            }
+            return sb.ToString();
         }
 
         public string DebugState()
         {
-            return $"panels: options={_options.Placement} crop={_options.Crop} pos={_options.Pos} overlay={_overlay.Placement} target={_overlayTarget} | main={_main.Placement} | build={_build.Placement} crop={_build.Crop} hidden={_menuHidden} tiles={string.Join(",", _tiles.ConvertAll(t => t.Name + (t.Found ? "+" : "-")))} mainCrop={_main.Crop} toolboxOpen={ToolboxOpen()} canvas={(_buildCanvas != null)}";
+            return $"panels: options={_options.Placement} crop={_options.Crop} pos={_options.Pos} overlay={_overlay.Placement} labels={_labelsShown} mainPull={_mainPull.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} nearest={_lastNearest.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} hit={_lastHitName} mainPos={_main.Pos} head={_lastHead} target={_overlayTarget} | main={_main.Placement} | build={_build.Placement} buildPos={_build.Pos} buildFwd={_build.Rot * Vector3.forward} buildUp={_build.Rot * Vector3.up} mpp={_build.MetersPerPixel} crop={_build.Crop} hidden={_menuHidden} tiles={string.Join(",", _tiles.ConvertAll(t => t.Name + (t.Found ? "+" : "-")))} mainCrop={_main.Crop} toolboxOpen={ToolboxOpen()} canvas={(_buildCanvas != null)} handle={_handleDrag} live={_liveScale:0.000}/{_liveTilt:0.0} angle0={_dragAngle0:0.0} angle={_lastHandAngle:0.0} mountF={_mountFwd} mountN={_mountFace}";
         }
     }
 }

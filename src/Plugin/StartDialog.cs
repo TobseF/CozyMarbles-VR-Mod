@@ -105,7 +105,7 @@ namespace CozyMarblesVR
         {
             if (!_fallback) return;
             Styles();
-            const float W = 620f, H = 470f;
+            const float W = 620f, H = 560f;
             float scale = Mathf.Clamp(Mathf.Min(Screen.width / (W + 40f), Screen.height / (H + 40f)), 0.6f, 3f);
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
             float sw = Screen.width / scale, sh = Screen.height / scale;
@@ -129,8 +129,14 @@ namespace CozyMarblesVR
                 () => _resolution = (_resolution + 1) % _resolutions.Count, _resolutions.Count > 1);
             Row(Loc.T("Anzeige", "Mode"), ModeNames[_mode], () => _mode = (_mode + 2) % 3, () => _mode = (_mode + 1) % 3, true);
 
-            GUILayout.Space(8f);
-            GUILayout.Label(Loc.T("Gilt für das Fenster am PC. Im VR-Modus bestimmt die Brille die Auflösung im Headset.", "Applies to the window on the PC. In VR mode the headset decides the resolution in the headset."), _hint);
+            GUILayout.Label(Loc.T("Gilt nur für das Fenster am PC, nicht für die Brille.", "Only for the window on the PC, not for the headset."), _hint);
+            GUILayout.Space(6f);
+            var cfg = Plugin.Cfg;
+            Row(Loc.T("VR pro Auge", "VR per eye"), VRManager.PresetText(cfg.EyeResolution.Value),
+                () => cfg.EyeResolution.Value = VRManager.StepPreset(cfg.EyeResolution.Value, -1),
+                () => cfg.EyeResolution.Value = VRManager.StepPreset(cfg.EyeResolution.Value, 1), true);
+            Row(Loc.T("Zuschauer", "Spectator"), cfg.DesktopView.Value ? Loc.T("Ein", "On") : Loc.T("Aus", "Off"),
+                () => cfg.DesktopView.Value = !cfg.DesktopView.Value, () => cfg.DesktopView.Value = !cfg.DesktopView.Value, true);
             GUILayout.Space(14f);
 
             GUILayout.BeginHorizontal();
@@ -169,7 +175,7 @@ namespace CozyMarblesVR
         TMP_FontAsset _font;
         readonly List<UiButton> _uiButtons = new List<UiButton>();
         UiButton _pressed;
-        TextMeshProUGUI _displayValue, _resolutionValue, _modeValue;
+        TextMeshProUGUI _displayValue, _resolutionValue, _modeValue, _renderValue, _spectatorValue, _vrHint;
         Image _check;
         CanvasGroup _group;
 
@@ -280,10 +286,13 @@ namespace CozyMarblesVR
             dim.anchorMin = Vector2.zero; dim.anchorMax = Vector2.one; dim.sizeDelta = Vector2.zero;
             Img(dim, null, new Color(0.12f, 0.08f, 0.06f, 0.72f));
 
-            const float W = 1040f, H = 1010f;
-            var shadow = Rect("Shadow", go.transform, new Vector2(10f, -14f), new Vector2(W, H));
+            const float W = 1040f, H = 1330f;
+            // the window is taller than the 1080 reference height: scale it to fit with a margin
+            var win = Rect("Window", go.transform, Vector2.zero, new Vector2(W, H));
+            win.localScale = Vector3.one * Mathf.Min(1f, 1020f / H);
+            var shadow = Rect("Shadow", win, new Vector2(10f, -14f), new Vector2(W, H));
             Img(shadow, _rounded, new Color(0.1f, 0.05f, 0f, 0.35f));
-            var panel = Rect("Panel", go.transform, Vector2.zero, new Vector2(W, H));
+            var panel = Rect("Panel", win, Vector2.zero, new Vector2(W, H));
             Img(panel, _rounded, Cream);
 
             // header band with the title in the game's look: white letters on a brown shadow
@@ -315,9 +324,23 @@ namespace CozyMarblesVR
                 () => _resolution = (_resolution + 1) % _resolutions.Count, () => _resolutions.Count > 1);
             y -= 84f;
             _modeValue = SettingRow(panel, y, Loc.T("Anzeige", "Mode"), () => _mode = (_mode + 2) % 3, () => _mode = (_mode + 1) % 3, null);
-            y -= 72f;
-            Txt(panel, Loc.T("Gilt für das Fenster am PC. Im VR-Modus bestimmt die Brille die Auflösung im Headset.", "Applies to the window on the PC. In VR mode the headset decides the resolution in the headset."),
-                new Vector2(0f, y), new Vector2(W - 100f, 64f), 24f, BrownSoft, TextAlignmentOptions.Left);
+            y -= 62f;
+            Txt(panel, Loc.T("Gilt nur für das Fenster am PC, nicht für die Brille.", "Only for the window on the PC, not for the headset."),
+                new Vector2(0f, y), new Vector2(W - 100f, 44f), 24f, BrownSoft, TextAlignmentOptions.Left);
+
+            // the headset
+            y -= 70f;
+            Txt(panel, Loc.T("VR-Brille", "VR headset"), new Vector2(0f, y), new Vector2(W - 100f, 56f), 36f, Brown, TextAlignmentOptions.Left, true);
+            y -= 70f;
+            var cfg = Plugin.Cfg;
+            _renderValue = SettingRow(panel, y, Loc.T("Auflösung pro Auge", "Resolution per eye"),
+                () => cfg.EyeResolution.Value = VRManager.StepPreset(cfg.EyeResolution.Value, -1),
+                () => cfg.EyeResolution.Value = VRManager.StepPreset(cfg.EyeResolution.Value, 1), null);
+            y -= 84f;
+            _spectatorValue = SettingRow(panel, y, Loc.T("Zuschaueransicht", "Spectator view"),
+                () => cfg.DesktopView.Value = !cfg.DesktopView.Value, () => cfg.DesktopView.Value = !cfg.DesktopView.Value, null);
+            y -= 66f;
+            _vrHint = Txt(panel, "", new Vector2(0f, y), new Vector2(W - 100f, 56f), 22f, BrownSoft, TextAlignmentOptions.Left);
 
             // "do not show again"
             y -= 86f;
@@ -338,6 +361,17 @@ namespace CozyMarblesVR
             _displayValue.text = _displays.Count > 0 ? $"{_displays[_display].name}  ({_displays[_display].width}×{_displays[_display].height})" : "-";
             _resolutionValue.text = $"{_resolutions[_resolution].x} × {_resolutions[_resolution].y}";
             _modeValue.text = ModeNames[_mode];
+            var cfg = Plugin.Cfg;
+            _renderValue.text = VRManager.PresetText(cfg.EyeResolution.Value);
+            _spectatorValue.text = cfg.DesktopView.Value ? Loc.T("Ein", "On") : Loc.T("Aus (spart Leistung)", "Off (saves power)");
+            var sv = VRManager.SteamVREye;
+            bool high = cfg.EyeResolution.Value <= 0 && sv.x > VRManager.FramePanel * 1.5f;
+            _vrHint.text = high
+                ? Loc.T($"Achtung: SteamVR gibt {sv.x} × {sv.y} pro Auge vor – viel mehr, als die Steam Frame zeigt (2160 × 2160). Wähle oben eine Auflösung.",
+                        $"Careful: SteamVR asks for {sv.x} × {sv.y} per eye – far more than the Steam Frame shows (2160 × 2160). Pick a resolution above.")
+                : Loc.T("2160 × 2160 = Display der Steam Frame (mehr wird nicht angezeigt), darunter fünf leichtere Stufen. „SteamVR“ = Vorgabe aus SteamVR.",
+                        "2160 × 2160 = the Steam Frame's display (more is never shown), five lighter steps below. “SteamVR” = SteamVR's default.");
+            _vrHint.color = high ? new Color32(190, 60, 40, 255) : BrownSoft;
             _check.enabled = _dontShowAgain;
             _group.alpha = _busy ? 0.85f : 1f;
 

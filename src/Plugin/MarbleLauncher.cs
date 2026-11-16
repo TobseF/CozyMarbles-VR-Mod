@@ -35,9 +35,10 @@ namespace CozyMarblesVR
         Marble _released;
         float _releasedAt;
 
-        Transform _cone, _gauge, _needle;
-        TextMeshPro _label;
-        string _labelText;
+        Transform _cone, _gauge;
+        Material _lcd;
+        readonly List<Material> _leds = new List<Material>();
+        int _shownLevel = -1;
 
         public MarbleLauncher(Transform rig)
         {
@@ -179,7 +180,7 @@ namespace CozyMarblesVR
             _cone.rotation = Quaternion.LookRotation(dir, Mathf.Abs(Vector3.Dot(dir, Vector3.up)) > 0.95f ? _rig.forward : Vector3.up);
             _cone.localScale = new Vector3(0.011f, 0.011f, len);
 
-            // dial lying on the top of the controller like a little display, readable from above
+            // speed module set into the top of the controller: a ring of LEDs around a small 7-segment display
             const float size = 0.03f;                                 // real metres
             Vector3 up = gripRot * Vector3.up, fwd = gripRot * Vector3.forward;
             if (!_gauge.gameObject.activeSelf) _gauge.gameObject.SetActive(true);
@@ -196,10 +197,12 @@ namespace CozyMarblesVR
                 _gauge.rotation = rot;
             }
             _gauge.localScale = Vector3.one * size;
-            _needle.localRotation = Quaternion.Euler(0f, 0f, 90f - 180f * t);
-
-            string text = level == 0 ? Loc.T("Fallen", "Drop") : level.ToString();
-            if (_label != null && text != _labelText) { _labelText = text; _label.text = text; }
+            if (level != _shownLevel)
+            {
+                _shownLevel = level;
+                _lcd.mainTexture = Icons.Get("lcd_" + level);
+                for (int i = 0; i < _leds.Count; i++) _leds[i].color = i < level ? LedColor(i) : new Color(0.24f, 0.21f, 0.19f, 1f);
+            }
         }
 
         // where the dial sits on the controller model, relative to the model (found once from its vertices)
@@ -227,7 +230,7 @@ namespace CozyMarblesVR
                 try { verts = mesh.vertices; } catch { return false; }   // mesh not readable
                 if (verts.Length == 0) return false;
                 Vector3 c = hand.TransformPoint(mesh.bounds.center);
-                float footprint = 0.012f * scale, top = float.MinValue;
+                float footprint = 0.016f * scale, top = float.MinValue;
                 for (int i = 0; i < verts.Length; i++)
                 {
                     Vector3 d = hand.TransformPoint(verts[i]) - c;
@@ -258,35 +261,40 @@ namespace CozyMarblesVR
             if (_cone != null) return;
             _cone = Pyramid("CozyVR Throw Direction", _rig, Unlit(new Color(1f, 0.6f, 0.15f, 0.95f)));
 
-            // the dial: a 1 x 1 unit root (scaled to its size), background, needle turning around the centre, number below
-            _gauge = new GameObject("CozyVR Speed Dial") { layer = HudPanel.HudLayer }.transform;
+            // the speed module: a 1 x 1 unit root scaled to its size. Dark round bezel, six LEDs on an arc (slow = teal,
+            // fast = red), the level as a 7-segment digit in the middle
+            _gauge = new GameObject("CozyVR Speed Module") { layer = HudPanel.HudLayer }.transform;
             _gauge.SetParent(_rig, false);
-            var bg = HudPanel.MakeQuad("Dial", Icons.Material("gauge"), _gauge);
-            bg.localPosition = Vector3.zero;
-            _needle = new GameObject("Needle Pivot") { layer = HudPanel.HudLayer }.transform;
-            _needle.SetParent(_gauge, false);
-            var needleMat = Icons.Material("gauge_needle");
-            needleMat.renderQueue += 1;
-            var nq = HudPanel.MakeQuad("Needle", needleMat, _needle);
-            nq.localPosition = new Vector3(0f, 0f, -0.01f);
-            var font = VRSettingsPanel.FindFont();
-            if (font != null)
+            var bezel = Icons.Material("plate");
+            bezel.color = new Color32(46, 40, 36, 255);
+            bezel.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent + 20;
+            HudPanel.MakeQuad("Bezel", bezel, _gauge).localScale = new Vector3(1.12f, 1.12f, 1f);
+            for (int i = 0; i < MaxLevel; i++)
             {
-                var go = new GameObject("Speed") { layer = HudPanel.HudLayer };
-                go.transform.SetParent(_gauge, false);
-                go.transform.localPosition = new Vector3(0f, -0.25f, -0.02f);
-                _label = go.AddComponent<TextMeshPro>();
-                _label.font = font;
-                _label.fontSize = 1.6f;
-                _label.fontStyle = FontStyles.Bold;
-                _label.alignment = TextAlignmentOptions.Center;
-                _label.enableWordWrapping = false;
-                _label.color = new Color(0.3f, 0.27f, 0.25f, 1f);
-                _label.rectTransform.sizeDelta = new Vector2(1f, 0.4f);
-                _label.renderer.sortingOrder = 5;
+                var m = Icons.Material("ui_round_rect");
+                m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent + 21;
+                _leds.Add(m);
+                float a = Mathf.Lerp(155f, 25f, i / (float)(MaxLevel - 1)) * Mathf.Deg2Rad;
+                var led = HudPanel.MakeQuad("LED " + (i + 1), m, _gauge);
+                led.localPosition = new Vector3(Mathf.Cos(a) * 0.4f, Mathf.Sin(a) * 0.4f - 0.06f, -0.002f);
+                led.localRotation = Quaternion.Euler(0f, 0f, a * Mathf.Rad2Deg - 90f);
+                led.localScale = new Vector3(0.17f, 0.085f, 1f);
             }
+            _lcd = Icons.Material("lcd_0");
+            _lcd.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent + 22;
+            var lcd = HudPanel.MakeQuad("Display", _lcd, _gauge);
+            lcd.localPosition = new Vector3(0f, -0.12f, -0.003f);
+            lcd.localScale = new Vector3(0.33f, 0.44f, 1f);
             _cone.gameObject.SetActive(false);
             _gauge.gameObject.SetActive(false);
+        }
+
+        static Color LedColor(int i)
+        {
+            Color[] stops = { new Color32(64, 178, 174, 255), new Color32(120, 200, 110, 255), new Color32(250, 205, 70, 255), new Color32(240, 146, 58, 255), new Color32(226, 75, 74, 255) };
+            float f = i / (float)(MaxLevel - 1) * (stops.Length - 1);
+            int k = Mathf.Min((int)f, stops.Length - 2);
+            return Color.Lerp(stops[k], stops[k + 1], f - k);
         }
 
         static Material Unlit(Color c)

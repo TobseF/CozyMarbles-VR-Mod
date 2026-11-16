@@ -22,6 +22,19 @@ namespace CozyMarblesVR
 
         public GrabMode(Transform rig) { _rig = rig; }
 
+        /// <summary>0 = pointer (laser), 1 = hand (ball), 2 = marbles.</summary>
+        public int Tool => !Active ? 0 : Plugin.Cfg.MarbleMode.Value ? 2 : 1;
+
+        public void SetTool(int tool)
+        {
+            Plugin.Cfg.GrabMode.Value = tool != 0;
+            Plugin.Cfg.MarbleMode.Value = tool == 2;
+            Plugin.Log.LogInfo("Tool: " + (tool == 0 ? "pointer" : tool == 1 ? "hand" : "marbles"));
+        }
+
+        /// <summary>Pointer -> hand -> marbles -> pointer.</summary>
+        public void CycleTool() => SetTool((Tool + 1) % 3);
+
         public void ToggleMarbles()
         {
             bool on = !Plugin.Cfg.MarbleMode.Value;

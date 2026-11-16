@@ -166,6 +166,29 @@ def resize():
     save(img, "resize", n, n)
 
 
+def build_tilt():
+    """Tilt handle of the build menu: the panel seen from the side on its pivot, with a two-headed arc."""
+    n = 96
+    img, d = canvas(n, n)
+    round_button(d, n)
+    px, py = s(34), s(72)                        # pivot at the lower edge; the viewer is on the left
+    a = math.radians(-62)
+    d.line((px, py, px + math.cos(a) * s(32), py + math.sin(a) * s(32)), fill=INK, width=s(8))
+    d.ellipse((px - s(6), py - s(6), px + s(6), py + s(6)), fill=INK)
+    r = s(44)
+    a0, a1 = -112, -36
+    d.arc((px - r, py - r, px + r, py + r), a0 + 6, a1 - 6, fill=ORANGE, width=s(6))
+    hl = s(13)
+    for end, sign in ((a0, -1), (a1, 1)):
+        e = math.radians(end)
+        ex, ey = px + math.cos(e) * r, py + math.sin(e) * r
+        tang = e + sign * math.pi / 2
+        tip = (ex + math.cos(tang) * hl * 0.6, ey + math.sin(tang) * hl * 0.6)
+        l = (ex + math.cos(tang + 2.3) * hl, ey + math.sin(tang + 2.3) * hl)
+        rr = (ex + math.cos(tang - 2.3) * hl, ey + math.sin(tang - 2.3) * hl)
+        d.polygon([tip, l, rr], fill=ORANGE)
+    save(img, "build_tilt", n, n)
+
 def marble(d, cx, cy, r):
     # glass marble: shaded blue sphere (light from the upper left), one orange swirl, white gloss spot
     d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(40, 95, 175, 255))
@@ -320,7 +343,177 @@ def ui_monitor():
     save(img, "ui_monitor", n, n)
 
 
+# ---------------------------------------------------------------- controller decals
+# White glyphs on transparent ground (tinted in the game), a round sticker plate, 7-segment digits.
+
+G = 128
+W_ = (255, 255, 255, 255)
+LW = 13  # stroke width at 128 px
+
+
+def gcanvas():
+    return canvas(G, G)
+
+
+def P(x, y):
+    return (s(x), s(y))
+
+
+def line(d, pts, w=LW):
+    pts = [P(*q) for q in pts]
+    d.line(pts, fill=W_, width=s(w), joint="curve")
+    for q in (pts[0], pts[-1]):
+        r = s(w) / 2
+        d.ellipse((q[0] - r, q[1] - r, q[0] + r, q[1] + r), fill=W_)
+
+
+def poly(d, pts):
+    d.polygon([P(*q) for q in pts], fill=W_)
+
+
+def arc(d, cx, cy, r, a0, a1, w=LW):
+    d.arc((s(cx - r), s(cy - r), s(cx + r), s(cy + r)), a0, a1, fill=W_, width=s(w))
+
+
+def disc(d, cx, cy, r, fill=W_):
+    d.ellipse((s(cx - r), s(cy - r), s(cx + r), s(cy + r)), fill=fill)
+
+
+def arrow_head(d, x, y, ang, size=22):
+    import math as m
+    a = m.radians(ang)
+    tip = (x + m.cos(a) * size * 0.6, y + m.sin(a) * size * 0.6)
+    l = (x + m.cos(a + 2.4) * size * 0.75, y + m.sin(a + 2.4) * size * 0.75)
+    r = (x + m.cos(a - 2.4) * size * 0.75, y + m.sin(a - 2.4) * size * 0.75)
+    poly(d, [tip, l, r])
+
+
+def glyph(name, draw):
+    img, d = gcanvas()
+    draw(d)
+    save(img, "g_" + name, G, G)
+
+
+def glyphs():
+    glyph("up", lambda d: (line(d, [(64, 104), (64, 40)]), arrow_head(d, 64, 34, -90, 46)))
+    glyph("down", lambda d: (line(d, [(64, 24), (64, 88)]), arrow_head(d, 64, 94, 90, 46)))
+    glyph("left", lambda d: (line(d, [(104, 64), (40, 64)]), arrow_head(d, 34, 64, 180, 46)))
+    glyph("right", lambda d: (line(d, [(24, 64), (88, 64)]), arrow_head(d, 94, 64, 0, 46)))
+    # undo / redo: hooked arrows
+    glyph("undo", lambda d: (arc(d, 68, 70, 30, 270, 450), line(d, [(68, 100), (44, 100)]), line(d, [(68, 40), (44, 40)]), arrow_head(d, 34, 40, 180, 42)))
+    glyph("redo", lambda d: (arc(d, 60, 70, 30, 90, 270), line(d, [(60, 100), (84, 100)]), line(d, [(60, 40), (84, 40)]), arrow_head(d, 94, 40, 0, 42)))
+    glyph("back", lambda d: (line(d, [(100, 96), (100, 70), (90, 56), (40, 56)]), arrow_head(d, 32, 56, 180, 46)))
+    glyph("fly", lambda d: ([line(d, l) for l in ([(64, 22), (64, 106)], [(22, 64), (106, 64)])], [arrow_head(d, *q, 34) for q in ((64, 16, -90), (64, 112, 90), (16, 64, 180), (112, 64, 0))]))
+    glyph("pause", lambda d: (line(d, [(46, 34), (46, 94)], 18), line(d, [(82, 34), (82, 94)], 18)))
+    glyph("rotate", lambda d: (arc(d, 64, 64, 36, 200, 500 - 40), arrow_head(d, 34, 50, -100, 40)))
+    glyph("turn", lambda d: (arc(d, 64, 74, 40, 200, 340), arrow_head(d, 26, 82, 110, 34), arrow_head(d, 102, 82, 70, 34)))
+    glyph("trash", lambda d: (line(d, [(30, 38), (98, 38)]), line(d, [(52, 38), (54, 26), (74, 26), (76, 38)], 10),
+                              line(d, [(38, 46), (44, 106), (84, 106), (90, 46)]), line(d, [(56, 58), (57, 92)], 9), line(d, [(72, 58), (71, 92)], 9)))
+    glyph("trash_marbles", lambda d: (line(d, [(30, 38), (98, 38)]), line(d, [(38, 46), (44, 106), (84, 106), (90, 46)]), disc(d, 52, 22, 11), disc(d, 76, 22, 11), disc(d, 64, 72, 15)))
+    glyph("play", lambda d: poly(d, [(40, 26), (104, 64), (40, 102)]))
+    glyph("plus", lambda d: (line(d, [(64, 26), (64, 102)], 18), line(d, [(26, 64), (102, 64)], 18)))
+    glyph("minus", lambda d: line(d, [(26, 64), (102, 64)], 18))
+    glyph("copy", lambda d: (d.rounded_rectangle((s(22), s(36), s(78), s(104)), radius=s(10), outline=W_, width=s(11)),
+                             line(d, [(48, 22), (98, 22), (106, 30), (106, 84)], 11)))
+    glyph("paste", lambda d: (d.rounded_rectangle((s(28), s(28), s(100), s(108)), radius=s(10), outline=W_, width=s(11)),
+                              d.rounded_rectangle((s(46), s(18), s(82), s(38)), radius=s(6), fill=W_), line(d, [(46, 66), (82, 66)], 10), line(d, [(46, 86), (74, 86)], 10)))
+    glyph("cut", lambda d: (d.ellipse((s(18), s(76), s(50), s(108)), outline=W_, width=s(10)), d.ellipse((s(78), s(76), s(110), s(108)), outline=W_, width=s(10)),
+                            line(d, [(42, 80), (92, 20)], 10), line(d, [(86, 80), (36, 20)], 10)))
+    glyph("magic", lambda d: (line(d, [(26, 104), (82, 48)], 14), poly(d, [(92, 14), (98, 30), (114, 36), (98, 42), (92, 58), (86, 42), (70, 36), (86, 30)])))
+    glyph("magnet", lambda d: (arc(d, 64, 60, 34, 0, 180, 22), line(d, [(30, 60), (30, 28)], 22), line(d, [(98, 60), (98, 28)], 22)))
+    glyph("recenter", lambda d: (d.ellipse((s(30), s(30), s(98), s(98)), outline=W_, width=s(11)), disc(d, 64, 64, 12),
+                                 line(d, [(64, 8), (64, 26)], 10), line(d, [(64, 102), (64, 120)], 10), line(d, [(8, 64), (26, 64)], 10), line(d, [(102, 64), (120, 64)], 10)))
+    glyph("pointer", lambda d: poly(d, [(34, 16), (34, 102), (56, 82), (72, 114), (88, 106), (72, 76), (102, 76)]))
+    glyph("hand", lambda d: hand(d, s(64), s(70), s(110), W_))
+    glyph("marble", lambda d: (d.ellipse((s(22), s(22), s(106), s(106)), outline=W_, width=s(11)), arc(d, 64, 64, 26, 200, 330, 10), disc(d, 46, 46, 8)))
+    glyph("world", lambda d: (d.ellipse((s(18), s(18), s(110), s(110)), outline=W_, width=s(10)), d.ellipse((s(44), s(18), s(84), s(110)), outline=W_, width=s(9)),
+                              line(d, [(20, 64), (108, 64)], 9)))
+    glyph("carry", lambda d: (hand(d, s(64), s(80), s(84), W_), d.rounded_rectangle((s(30), s(8), s(98), s(36)), radius=s(6), fill=W_)))
+    glyph("cycle", lambda d: (arc(d, 64, 64, 38, 20, 160), arc(d, 64, 64, 38, 200, 340), arrow_head(d, 28, 72, 100, 36), arrow_head(d, 100, 56, -80, 36)))
+    glyph("shift", lambda d: line(d, [(64, 18), (106, 62), (84, 62), (84, 104), (44, 104), (44, 62), (22, 62), (64, 18)], 10))
+    glyph("props", lambda d: ([line(d, [(24, y), (104, y)], 9) for y in (34, 64, 94)], disc(d, 48, 34, 13), disc(d, 84, 64, 13), disc(d, 56, 94, 13)))
+    glyph("menu_open", lambda d: (d.rounded_rectangle((s(18), s(24), s(110), s(104)), radius=s(10), outline=W_, width=s(10)), line(d, [(50, 26), (50, 102)], 10),
+                                  arrow_head(d, 92, 64, 0, 34), line(d, [(64, 64), (84, 64)], 10)))
+    glyph("menu_close", lambda d: (d.rounded_rectangle((s(18), s(24), s(110), s(104)), radius=s(10), outline=W_, width=s(10)), line(d, [(50, 26), (50, 102)], 10),
+                                   arrow_head(d, 70, 64, 180, 34), line(d, [(80, 64), (96, 64)], 10)))
+    glyph("toolbox", lambda d: (d.rounded_rectangle((s(16), s(44), s(112), s(104)), radius=s(10), outline=W_, width=s(10)), line(d, [(46, 44), (46, 30), (82, 30), (82, 44)], 10),
+                                line(d, [(16, 70), (112, 70)], 9)))
+    glyph("click", lambda d: (poly(d, [(46, 40), (46, 112), (64, 96), (78, 122), (90, 116), (76, 90), (102, 90)]), line(d, [(30, 30), (20, 20)], 9), line(d, [(46, 20), (46, 8)], 9), line(d, [(62, 30), (72, 20)], 9)))
+    glyph("check", lambda d: line(d, [(24, 66), (52, 94), (104, 34)], 16))
+    glyph("menu", lambda d: [line(d, [(24, y), (104, y)], 15) for y in (34, 64, 94)])
+    glyph("gear", lambda d: gear_glyph(d))
+    glyph("menu_center", lambda d: (d.rounded_rectangle((s(30), s(26), s(98), s(102)), radius=s(10), outline=W_, width=s(10)),
+                                    line(d, [(46, 46), (82, 46)], 9), line(d, [(46, 64), (82, 64)], 9), line(d, [(46, 82), (70, 82)], 9),
+                                    arrow_head(d, 12, 64, 0, 30), arrow_head(d, 116, 64, 180, 30)))
+    glyph("camera", lambda d: (d.rounded_rectangle((s(14), s(38), s(114), s(104)), radius=s(14), fill=W_), d.rounded_rectangle((s(42), s(24), s(86), s(44)), radius=s(6), fill=W_),
+                               disc(d, 64, 71, 22, (0, 0, 0, 0)), disc(d, 64, 71, 12)))
+    glyph("flag", lambda d: (line(d, [(30, 18), (30, 112)], 12), poly(d, [(36, 20), (106, 34), (84, 52), (106, 70), (36, 70)])))
+    glyph("manual", lambda d: (poly(d, [(14, 30), (60, 38), (60, 104), (14, 96)]), poly(d, [(68, 38), (114, 30), (114, 96), (68, 104)])))
+    glyph("layers", lambda d: (poly(d, [(64, 20), (112, 46), (64, 72), (16, 46)]), line(d, [(16, 66), (64, 92), (112, 66)], 10), line(d, [(16, 86), (64, 112), (112, 86)], 10)))
+
+
+def gear_glyph(d):
+    cx, cy = s(64), s(64)
+    for i in range(8):
+        a = 2 * math.pi * i / 8
+        pts = [rot(-s(10), -s(36), cx, cy, a), rot(s(10), -s(36), cx, cy, a), rot(s(8), -s(52), cx, cy, a), rot(-s(8), -s(52), cx, cy, a)]
+        d.polygon(pts, fill=W_)
+    d.ellipse((cx - s(40), cy - s(40), cx + s(40), cy + s(40)), fill=W_)
+    d.ellipse((cx - s(18), cy - s(18), cx + s(18), cy + s(18)), fill=(0, 0, 0, 0))
+
+
+def dpad_cross():
+    # plus-shaped plate under the four D-pad labels (tinted dark grey in the game)
+    n = 128
+    img, d = canvas(n, n)
+    d.rounded_rectangle((s(44), s(4), s(84), s(124)), radius=s(14), fill=WHITE)
+    d.rounded_rectangle((s(4), s(44), s(124), s(84)), radius=s(14), fill=WHITE)
+    save(img, "dpad_cross", n, n)
+
+
+def sticker_plate():
+    # round plate for decals: white face (tinted), slightly darker rim, light bevel on top
+    n = 128
+    img, d = canvas(n, n)
+    d.ellipse((s(2), s(2), s(126), s(126)), fill=(205, 205, 205, 255))
+    d.ellipse((s(8), s(6), s(120), s(118)), fill=WHITE)
+    d.arc((s(14), s(12), s(114), s(112)), 200, 330, fill=(255, 255, 255, 255), width=s(4))
+    save(img, "plate", n, n)
+
+
+SEG = {  # a b c d e f g
+    "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd", "6": "afgedc",
+}
+
+
+def lcd(ch):
+    # tiny 7-segment display: dark bezel, lit segments in amber, unlit ones faintly visible
+    w, h = 96, 128
+    img, d = canvas(w, h)
+    d.rounded_rectangle((0, 0, s(w) - 1, s(h) - 1), radius=s(16), fill=(40, 34, 30, 255))
+    d.rounded_rectangle((s(8), s(8), s(w - 8), s(h - 8)), radius=s(10), fill=(24, 20, 18, 255))
+    x0, x1, y0, y1, ym, th = 26, 70, 22, 106, 64, 11
+    segs = {
+        "a": ((x0 + 6, y0), (x1 - 6, y0)), "g": ((x0 + 6, ym), (x1 - 6, ym)), "d": ((x0 + 6, y1), (x1 - 6, y1)),
+        "f": ((x0, y0 + 6), (x0, ym - 6)), "b": ((x1, y0 + 6), (x1, ym - 6)),
+        "e": ((x0, ym + 6), (x0, y1 - 6)), "c": ((x1, ym + 6), (x1, y1 - 6)),
+    }
+    on = SEG[ch]
+    for k, (p0, p1) in segs.items():
+        col = (255, 170, 60, 255) if k in on else (70, 52, 40, 255)
+        d.line((s(p0[0]), s(p0[1]), s(p1[0]), s(p1[1])), fill=col, width=s(th))
+        for q in (p0, p1):
+            r = s(th) / 2
+            d.ellipse((s(q[0]) - r, s(q[1]) - r, s(q[0]) + r, s(q[1]) + r), fill=col)
+    save(img, "lcd_" + ch, w, h)
+
+
 if __name__ == "__main__":
+    glyphs()
+    sticker_plate()
+    dpad_cross()
+    for ch in "0123456":
+        lcd(ch)
     ui_round_rect()
     ui_header()
     ui_arrow()
@@ -337,4 +530,5 @@ if __name__ == "__main__":
     toggle(True)
     grab_bar()
     resize()
+    build_tilt()
     print("icons written to", os.path.normpath(OUT))

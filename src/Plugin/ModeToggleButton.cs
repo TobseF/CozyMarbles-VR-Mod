@@ -290,15 +290,30 @@ namespace CozyMarblesVR
             foreach (var tr in clone.GetComponentsInChildren<Transform>(true))
             {
                 if (tr.name != "img_icon") continue;
-                var img = tr.GetComponent<Image>();
                 var tex = Icons.Get("btn_vr");
-                if (img != null && tex != null)
+                if (tex != null)
                 {
+                    // The game's hover animation (PPG_ButtonWIconAnim) tweens img_icon's colour and restores the
+                    // original dark colour on enable/exit, which made our icon dark on dark. So the original stays
+                    // hidden and the mod's icon is a separate Image that nothing animates.
+                    var src = (RectTransform)tr;
+                    var go = new GameObject("vr icon img", typeof(RectTransform)) { layer = tr.gameObject.layer };
+                    var rt = (RectTransform)go.transform;
+                    rt.SetParent(tr.parent, false);
+                    rt.SetSiblingIndex(tr.GetSiblingIndex() + 1);
+                    rt.anchorMin = src.anchorMin;
+                    rt.anchorMax = src.anchorMax;
+                    rt.pivot = src.pivot;
+                    rt.anchoredPosition = src.anchoredPosition;
+                    rt.sizeDelta = src.sizeDelta;
+                    rt.localScale = src.localScale;
+                    var img = go.AddComponent<Image>();
                     img.sprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f));
                     img.color = Color.white;
                     img.preserveAspect = true;
+                    img.raycastTarget = false;
+                    tr.gameObject.SetActive(false);
                 }
-                tr.gameObject.SetActive(true);
                 break;
             }
             if (_vrSetText == null) { UnityEngine.Object.Destroy(clone); return; }
@@ -402,7 +417,7 @@ namespace CozyMarblesVR
 
         void UpdateDesktopHint(VRManager.ModeState mode)
         {
-            bool show = mode == VRManager.ModeState.VR || mode == VRManager.ModeState.VRNotShown;
+            bool show = (mode == VRManager.ModeState.VR || mode == VRManager.ModeState.VRNotShown) && Plugin.Cfg.DesktopHint.Value && Plugin.Cfg.DesktopView.Value;
             if (_hintGo == null)
             {
                 if (!show) return;
@@ -445,7 +460,7 @@ namespace CozyMarblesVR
             if (_hintGo.activeSelf != show) _hintGo.SetActive(show);
             if (!show) return;
             string text = mode == VRManager.ModeState.VR
-                ? Loc.T("VR-Modus – Zuschaueransicht   ·   F9: am Monitor spielen", "VR mode – spectator view   ·   F9: play on monitor")
+                ? Loc.T("VR-Modus – Zuschaueransicht   ·   F9: am Monitor spielen   ·   F10: Hinweis aus   ·   F11: Ansicht aus", "VR mode – spectator view   ·   F9: play on monitor   ·   F10: hide this hint   ·   F11: view off")
                 : Loc.T("VR-Modus – warte, bis SteamVR das Spiel im Headset zeigt   ·   F9: am Monitor spielen", "VR mode – waiting for SteamVR to show the game in the headset   ·   F9: play on monitor");
             if (text != _lastHint) { _lastHint = text; _hint.text = text; }
         }

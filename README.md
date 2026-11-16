@@ -79,6 +79,7 @@ Cozy Marbles/
 
 If a game update removes the files in `Cozy Marbles_Data`, the mod restores them from
 `BepInEx/plugins/CozyMarblesVR/native`. Restart the game once in that case.
+
 </details>
 
 ### Starting the game
@@ -96,51 +97,72 @@ If a game update removes the files in `Cozy Marbles_Data`, the mod restores them
 
 ## ✨ Features
 
-| | |
-|---|---|
-| 🎲 **Tabletop marble run** | The whole run as a model on a table in front of you. Grab the world with the grips to move, turn and scale it. |
-| ✋ **Grab mode** | Grab pieces with the controller and move them freely in space. A transparent ghost shows where they will snap. |
-| 🔦 **Pointer mode** | The game's original grid building, operated with a laser pointer. |
-| 🪟 **Menus in the room** | The main menu floats in front of you. The toolbar and build menu sit on your left hand. Object options appear right above the selected piece. |
-| 🎮 **Steam Frame controllers** | Native input profile and the real 3D controller models, loaded from your SteamVR installation. |
-| 🖥️ **VR ↔ monitor** | Switch any time with **F9**, the **Play in VR / Play on monitor** entry in the main menu, or the small **VR 0.1.0** label below the game's version number (hover = tooltip, click = confirmation). The PC window shows a calm spectator view. |
-| 🌍 **English & German** | All mod texts follow the game language (German → German, anything else → English). |
+|                                |                                                                                                                                                                                                                                               |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🎲 **Tabletop marble run**     | The whole run as a model on a table in front of you. Grab the world with the grips to move, turn and scale it.                                                                                                                                |
+| ✋ **Grab mode**                | Grab pieces with the controller and move them freely in space. A transparent ghost shows where they will snap.                                                                                                                                |
+| 🔦 **Pointer mode**            | The game's original grid building, operated with a laser pointer.                                                                                                                                                                             |
+| 🪟 **Menus in the room**       | The main menu floats in front of you. The build menu floats above your left controller, all toolbar functions sit as round buttons on it. Object options appear right above the selected piece.                                              |
+| 🎮 **Steam Frame controllers** | Native input profile and the real 3D controller models, loaded from your SteamVR installation.                                                                                                                                                |
+| 🖥️ **VR ↔ monitor**           | Switch any time with **F9**, the **Play in VR / Play on monitor** entry in the main menu, or the small **VR 0.1.0** label below the game's version number (hover = tooltip, click = confirmation). The PC window shows a calm spectator view. |
+| 🌍 **English & German**        | All mod texts follow the game language (German → German, anything else → English).                                                                                                                                                            |
 
-### Grab mode vs. pointer mode
+### Tools: pointer, hand, marble
 
-The **mouse/hand toggle** in the left-hand menu switches modes (the ball appears on the controller right away). You can also **double-tap the left bumper**.
+**L2** (left trigger) switches the tool: pointer → hand → marble → pointer. The round buttons on the left controller
+do the same; the active tool is lit, and the label on **R2** always shows what the trigger does.
 
+- **Pointer:** the game's original building on the grid, with the laser as your mouse pointer.
 - **Hand:** a small ball replaces the laser at the tip of the controller. Touch a piece (the ball turns yellow) and
-  **hold the trigger**: the piece hangs on your hand and follows it freely, without the grid. Twist the controller to
-  turn it in 90° steps. The height follows your hand. **Release** to set it down where the transparent preview shows.
+  **hold R2**: the piece hangs on your hand and follows it freely, without the grid. Twist the controller to turn it
+  in 90° steps. The height follows your hand. **Release** to set it down where the transparent preview shows.
   New pieces from the build menu hang on your hand in the same way and are placed with a trigger press.
   Decorations are not bound to the grid: with the **magnet** off they land exactly on the surface below the ball.
-- **Marbles:** the round **marble button** next to the mouse/hand toggle turns on marble mode (it also switches to
-  hand mode). The next marble waits at the tip of the controller; every **trigger press** lets it go and the next one
-  appears. **L1** (bumper of the other hand) throws faster, a short tap on **L2** (its trigger) slower – levels 0 to 6,
-  at 0 the marble just drops. Holding L2 still brings up the build menu as usual. A small orange cone in front of the
-  marble shows the direction (straight down when dropping) and a little dial on top of the controller shows the level. With **marble physics** on (VR settings, Marbles
-  section) the waiting marble is solid and pushes other marbles; off, it is a see-through preview. Pointing at a menu,
-  the trigger still clicks the menu. Marbles that leave the play area are removed by the game after 15 seconds.
-- **Mouse:** the game's original building on the grid, with the laser as your mouse pointer. In menus the laser
-  appears automatically in both modes.
+- **Marble:** the next marble waits at the tip of the controller; every **R2** press lets it go and the next one
+  appears. **Y** (upper) throws faster, **A** (lower) slower – levels 0 to 6, at 0 the marble just drops. A small orange cone in front
+  of the marble shows the direction (straight down when dropping); the level shows on a little LED ring with a
+  7-segment display on the right handle. With **marble physics** on (VR settings, Marbles section) the waiting marble
+  is solid and pushes other marbles; off, it is a see-through preview. Marbles that leave the play area are removed by
+  the game after 15 seconds.
+
+Pointing at a menu, the trigger always clicks the menu, whatever the tool.
+
+### The controllers
+
+- **Labels on the buttons:** every button carries a small coloured icon of what it does right now – it changes with
+  the tool, in menus and on the second layer, and sinks in while pressed. Colours: teal = building, red = deleting,
+  amber = marbles, purple = menus, grey = moving.
+- **Round buttons on the left controller:** a collar around the left controller holds push buttons for everything
+  the game's toolbar used to do: the three tools (on a common base – only one is active), **prepare marbles**,
+  **delete all marbles**, **build menu** on/off, **racing**, **reset camera** and the **VR controls help**. While
+  something is selected an **object options** button appears (shows / hides the options above the selection). Click
+  them with the laser or touch them with the ball; in hand mode the laser appears as soon as you point at one.
+- **Build menu:** fixed to the tip of the left controller like a tablet in your hand – it moves and turns with the
+  controller and continues its button side (`AttachedTiltTowardsYou`). **X** (or its ring button) shows and hides
+  it; closing it with its own arrow hides it too. Two handles at its lower right corner adjust it while you hold
+  the trigger on them: the **resize** handle (diagonal arrows) follows the laser, from small to large (12–60 %); the
+  **tilt** handle (curved arrow) turns the menu like your pointing hand – tip the hand back and the menu leans back by
+  the same angle. 0° is flush with the controller's button ring, up to +75° towards you and −75° away from you; within
+  ±5° it snaps softly to 0. Size or angle is shown next to the handles while you hold them; the laser is hidden while
+  you tilt.
 
 ### Windows in VR
 
-- **Main menu** (also pause and dialogs): floats fixed in the room and always stays in front of the game objects.
-- **Left-hand menu:** the game's toolbar (undo/redo, play, delete, race, reset camera) in one row above the build
-  menu, followed by the **mouse/hand toggle** and the **marble button**. Left of the build menu sits the round menu button with **VR settings**
-  (gear) and the **manual** (VR controls for your current button layout) below it.
-  Tap the left trigger to open or close the toolbar, hold it to carry the whole menu on your hand, and release it to
-  leave the menu where it is.
+- **Main menu** (also pause and dialogs): only the menu itself (plus an open dialog), centred in front of you.
+  All menus are real objects in the room with a proper depth for both eyes – so they are never painted over a piece
+  that is actually closer to you. If scenery stands between you and an open menu (the marble run in the main
+  menu's room), you step back and up a little while the menu is open, and the menu moves closer if that is not
+  enough; when it closes you are back where you were. At every start you stand at the start position and the main menu is in front
+  of you, wherever you are in your room. In menus, **L2** brings the menu back in front of you and **R2** pointed
+  into empty space puts you back at the start position.
+- **VR settings:** **View button** on the left controller, or "VR settings" in the main menu. In menus they take the
+  main menu's place (closing them brings it back); at the top they switch over to the game's own settings.
 - **Object menu:** select a piece and its options (move, color, delete, settings) appear right above it, turned
   towards you.
-- **Labels on objects** (marble names, starter and checkpoint info, portal links, selection box) appear right in
-  front of their object, and you can press their buttons with the laser.
-- **VR settings** can also be opened from the game's main menu (entry "VR settings" below "Play on monitor").
-- Every free-standing window has a small bar underneath: grab the **bar** to move it (right stick = further/closer),
-  drag the round **resize** button at the corner to resize it, and press the **gear** for the VR settings. The VR settings open turned towards you and have the same grip
-  bar to move them. Everything is saved.
+- **Labels on objects** (marble names, starter and checkpoint info, portal links, selection box) sit at the depth
+  of their object, right in front of it, and you can press their buttons with the laser.
+- Free-standing windows have a small bar underneath: grab the **bar** to move it (right stick = further/closer) and
+  drag the round **resize** button at the corner to resize it. Everything is saved.
 
 ---
 
@@ -151,32 +173,49 @@ The **mouse/hand toggle** in the left-hand menu switches modes (the ball appears
 Default layout for the Steam Frame controllers (native binding), with the laser on the right hand. You can switch
 the hand with `PointerHand`, or remap everything in SteamVR's *Controller Bindings*.
 
-| Controller | Input | Action |
-|---|---|---|
-| Right | Trigger | Left click: place, select, drag, use menus · grab mode: grab / release |
-| Right | A | Rotate piece · in menus: select |
-| Right | B | Cancel (right click) · in menus: back |
-| Right | X | Open / close build menu |
-| Right | Y | Delete |
-| Right | Bumper | Roll the marbles |
-| Right | Stick left/right | Turn (30° snap turn) |
-| Right | Stick up/down | While placing: build height · on panels: scroll · otherwise: fly up/down |
-| Right | Stick click | Magnet snapping on/off |
-| Left | Trigger | Build menu: tap = open/close, hold = carry on hand, release = leave it there |
-| Left | Bumper | Shift: free height / multi-select · double-tap: grab ↔ pointer mode |
-| Left | D-pad | Height up/down, undo (left), redo (right) · in menus: move focus |
-| Left | Stick | Fly (in view direction) · in menus: move focus |
-| Left | View button | Escape (pause, close windows) |
-| Left | Hold stick click | Second layer: A = copy, B = paste, X = cut, Y = magic draw vertical, right stick click = recenter view |
-| Both | Hold grip + move hand | Grab and move the world |
-| Both | Both grips + pull apart / together / twist | Scale and rotate the world (the scale is saved) |
+| Controller | Input | Action | Second layer (hold L-stick click) |
+| ---------- | ----- | ------ | --------------------------------- |
+| Right | R2 (trigger) | Click: place, select, drag, use menus · hand: grab / release · marble: drop / throw · menus, pointed into empty space: back to the start position | |
+| Right | A | Rotate piece · in menus: select · marble: throw slower | Copy |
+| Right | B | Cancel (right click) · in menus: back | Paste |
+| Right | X | Build menu on / off | Cut |
+| Right | Y | Delete · marble: throw faster | Magic draw vertical |
+| Right | Menu button | Main menu / pause | |
+| Right | R1 (bumper) | Roll the marbles | |
+| Right | Stick left/right | Turn (30° snap turn) | |
+| Right | Stick up/down | While placing: build height · on panels: scroll · otherwise: fly up/down | |
+| Right | Stick click | Magnet snapping on/off | Recenter view |
+| Right | Grip | Grab and move the world | |
+| Left | L2 (trigger) | Next tool: pointer → hand → marble · in menus: menu back in front of you | |
+| Left | L1 (bumper) | Shift: free height / multi-select | |
+| Left | Grip | Grab and move the world · both grips: scale and rotate it (the scale is saved) | |
+| Left | D-pad | Height up/down, undo (left), redo (right) · in menus: move focus | |
+| Left | Stick | Fly (in view direction) · in menus: move focus | |
+| Left | Stick click | Hold: second layer | |
+| Left | View button | VR settings | |
 
 **Menus without the laser:** in the main menu, pause screen and dialogs, the left D-pad or stick moves a focus
 cursor, **A** clicks and **B** presses the dialog's back button. As soon as you move the laser or pull the trigger,
 the laser takes over again.
 
-**Keyboard:** **F9** switches between VR and monitor. The launch option `-novr` starts on the monitor without the
+**Keyboard:** **F9** switches between VR and monitor, **F10** hides / shows the info banner of the spectator view (e.g. for screen recordings), **F11** switches the
+spectator view off and on. Off, the PC window shows a small screen with buttons (spectator view on, play on the
+monitor, quit) instead of a third picture of the world – that saves graphics power. The VR settings ("PC screen")
+also set the spectator resolution (25–100 % of the window) independently of the headset. The launch option `-novr` starts on the monitor without the
 start window.
+
+**Resolutions – which one does what:**
+
+- **Headset:** VR settings → "Headset picture" → **Resolution per eye**, also in the start window. Choose the
+  Steam Frame's own display (**2160 × 2160** – more is never shown) or one of five lighter steps (1920, 1728, 1536,
+  1344, 1152; the height follows SteamVR's aspect ratio), or **SteamVR** to use what SteamVR asks for (its per-app
+  resolution, read when the game starts). Changes apply at once; the line below shows what is really rendered.
+  The start window warns in red when SteamVR asks for far more than the Steam Frame shows.
+- **FPS readout:** VR settings → "FPS readout": frame rate against the headset's refresh rate (green / yellow / red),
+  frame time and pixels per eye, just below your view.
+- **PC window:** the resolution in the game's own settings (and in the start window) only sizes the window on
+  the monitor; it has no effect on the headset.
+- **Spectator view:** VR settings → "PC screen" → spectator resolution (25–100 % of the window).
 
 ---
 
@@ -187,16 +226,17 @@ start window.
 Most settings can be changed in VR (the **VR** button). Everything is stored in
 `BepInEx\config\tobse.cozymarbles.vr.cfg`, which is created on the first start:
 
-| Setting | Meaning |
-|---|---|
-| `WorldScale` | Scale of the model (8 = table model about 2 m wide, 1 = life size) |
-| `Enabled` | `false` turns VR off without uninstalling (same as the launch option `-novr`) |
-| `DesktopView` | Spectator view in the PC window while in VR |
-| `ShowControllerModels` | Steam Frame controller models (otherwise simple boxes) |
-| `RenderScale`, `PostProcessing`, `DepthOfField` | Image quality vs. performance |
-| `[Controls] PointerHand, Turning, SnapTurnDegrees, MoveSpeed …` | Laser hand, snap/smooth turning, movement |
-| `[Controls] MenuNavigation`, `SteamFrameControllerProfile` | D-pad menu navigation, native Frame profile (off = SteamVR's Touch emulation) |
-| `[Grab] GrabMode, Reach, HoldSeconds, ToggleBumper, ShowGhost` | Grab mode on/off, reach of the ball, hold time before grabbing, double-tap bumper (`Left`/`Right`/`Both`/`None`), placement preview |
+| Setting                                                         | Meaning                                                                                                                             |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `WorldScale`                                                    | Scale of the model (8 = table model about 2 m wide, 1 = life size)                                                                  |
+| `Enabled`                                                       | `false` turns VR off without uninstalling (same as the launch option `-novr`)                                                       |
+| `DesktopView`                                                   | Spectator view in the PC window while in VR                                                                                         |
+| `DesktopViewScale`, `DesktopHint` | Spectator resolution relative to the window (0.25–1), info banner on/off |
+| `ShowControllerModels`                                          | Steam Frame controller models (otherwise simple boxes)                                                                              |
+| `EyeResolution`, `ShowFps`, `PostProcessing`, `DepthOfField`    | Headset pixels per eye (0 = SteamVR, 2160 = Steam Frame), FPS readout, image quality vs. performance                                |
+| `[Controls] PointerHand, Turning, SnapTurnDegrees, MoveSpeed …` | Laser hand, snap/smooth turning, movement                                                                                           |
+| `[Controls] MenuNavigation`, `SteamFrameControllerProfile`      | D-pad menu navigation, native Frame profile (off = SteamVR's Touch emulation)                                                       |
+| `[Grab] GrabMode, MarbleMode, ThrowLevel, MarblePhysics, Reach, HoldSeconds, ToggleBumper, ShowGhost`  | Grab mode on/off, reach of the ball, hold time before grabbing, double-tap bumper (`Left`/`Right`/`Both`/`None`), placement preview |
 
 ---
 
@@ -248,12 +288,12 @@ Both mirror the game folder. Upload both as assets of a release tagged with the 
 `https://github.com/TobseF/CozyMarbles-VR-Mod/releases/latest/download/CozyMarblesVR-with-BepInEx.zip` always points to
 the newest version, which helps installer hubs and scripts.
 
-| Path | Content |
-|---|---|
-| `src/Shim` | Replacements for `UnityEngine.Input` and the camera projections |
-| `src/Patcher` | BepInEx preloader patcher that redirects the game's calls to the shim (in memory) |
-| `src/Plugin` | OpenXR start-up, rig and cameras, panels, input, locomotion, grab mode |
-| `lib` | XR assemblies compiled from Unity's packages (OpenXR 1.16.1, XR Management 4.5.4, XR Core Utils 2.5.3) and the native OpenXR libraries. Rebuild with `build\build-xr-deps.ps1` |
+| Path          | Content                                                                                                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/Shim`    | Replacements for `UnityEngine.Input` and the camera projections                                                                                                                |
+| `src/Patcher` | BepInEx preloader patcher that redirects the game's calls to the shim (in memory)                                                                                              |
+| `src/Plugin`  | OpenXR start-up, rig and cameras, panels, input, locomotion, grab mode                                                                                                         |
+| `lib`         | XR assemblies compiled from Unity's packages (OpenXR 1.16.1, XR Management 4.5.4, XR Core Utils 2.5.3) and the native OpenXR libraries. Rebuild with `build\build-xr-deps.ps1` |
 
 After a game update, running `build\build.ps1` again is usually enough.
 
@@ -263,6 +303,7 @@ Set `[Debug] MockRuntime = true`, `SimulateControllers = true` and `Diagnostics 
 then runs against Unity's mock OpenXR runtime (`lib/mock`). Commands written to `BepInEx\cozyvr-cmd.txt` drive
 simulated controllers and save screenshots to `BepInEx\cozyvr-out` (see `src/Plugin/Diagnostics.cs` for the command
 list).
+
 </details>
 
 ---
@@ -270,3 +311,5 @@ list).
 <sub>Cozy Marbles VR is a fan project and is not affiliated with the developers of Cozy Marbles, Valve or Unity.
 The mod's own code is released under the [MIT license](LICENSE). Third-party components keep their own licenses,
 listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).</sub>
+
+

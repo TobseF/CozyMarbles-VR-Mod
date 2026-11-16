@@ -13,7 +13,7 @@ namespace CozyMarblesVR
     public class VRInput
     {
         enum Ctl { PTrigger, PGrip, PPrimary, PSecondary, PStick, OTrigger, OGrip, OPrimary, OSecondary, OStick, OMenu,
-                   FrameX, FrameY, DpadUp, DpadDown, DpadLeft, DpadRight, PBumper, OBumper, Count }
+                   FrameX, FrameY, DpadUp, DpadDown, DpadLeft, DpadRight, PBumper, OBumper, PMenu, Count }
 
         readonly Tracking _tracking;
         readonly HudPanel _hud;
@@ -71,7 +71,10 @@ namespace CozyMarblesVR
         public HandState PointerHandState => Plugin.Cfg.PointerHand.Value == Hand.Right ? _tracking.Right : _tracking.Left;
         public HandState OffHandState => Plugin.Cfg.PointerHand.Value == Hand.Right ? _tracking.Left : _tracking.Right;
         public bool PointerGrab => _ctl[(int)Ctl.PGrip] && _ctlAction[(int)Ctl.PGrip] == VRAction.GrabWorld;
-        public bool OffGrab => _ctl[(int)Ctl.OGrip] && _ctlAction[(int)Ctl.OGrip] == VRAction.GrabWorld;
+        // the off-hand grip carries the in-game menu - unless the pointer hand already holds the world when it is
+        // pressed: then both hands scale/rotate the world (decided at press time)
+        public bool OffGrab => _ctl[(int)Ctl.OGrip] && (_ctlAction[(int)Ctl.OGrip] == VRAction.GrabWorld || (_ctlAction[(int)Ctl.OGrip] == VRAction.MenuCarry && _leftGripWorld));
+        bool _leftGripWorld;
 
         const int WorldMask = (1 << 0) | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 13) | (1 << 14) | (1 << 18) | (1 << 19) | (1 << 20) | (1 << 21) | (1 << 23) | (1 << 24);
 
@@ -207,6 +210,7 @@ namespace CozyMarblesVR
                 {
                     case Ctl.DpadUp: case Ctl.DpadDown: case Ctl.DpadLeft: case Ctl.DpadRight: return VRAction.None;
                     case Ctl.PSecondary: return VRAction.MenuBack;
+                    case Ctl.OTrigger: return VRAction.ResetMenu;        // emergency: menu back in front of you
                     case Ctl.PPrimary: if (_navActive) return VRAction.LeftClick; break;
                 }
             }
@@ -239,6 +243,7 @@ namespace CozyMarblesVR
                 case Ctl.OSecondary: return cfg.OffSecondary.Value;
                 case Ctl.OStick: return cfg.OffStickClick.Value;
                 case Ctl.OMenu: return cfg.OffMenu.Value;
+                case Ctl.PMenu: return cfg.PointerMenu.Value;
                 case Ctl.FrameX: return cfg.FrameX.Value;
                 case Ctl.FrameY: return cfg.FrameY.Value;
                 case Ctl.DpadUp: return cfg.DpadUp.Value;
@@ -266,7 +271,9 @@ namespace CozyMarblesVR
             now[(int)Ctl.OSecondary] = o.Valid && o.Secondary;
             now[(int)Ctl.OStick] = o.Valid && o.StickClick;
             // The menu button sits on the left controller of most sets regardless of the pointer hand.
-            now[(int)Ctl.OMenu] = (o.Valid && o.Menu) || (p.Valid && p.Menu);
+            // left: View button, right: Menu button (Steam Frame); each with its own binding
+            now[(int)Ctl.OMenu] = o.Valid && o.Menu;
+            now[(int)Ctl.PMenu] = p.Valid && p.Menu;
             // Steam Frame extras: X/Y and the D-pad sit on fixed hands, so take them from whichever hand has them.
             now[(int)Ctl.FrameX] = (p.Valid && p.ButtonX) || (o.Valid && o.ButtonX);
             now[(int)Ctl.FrameY] = (p.Valid && p.ButtonY) || (o.Valid && o.ButtonY);
@@ -277,36 +284,29 @@ namespace CozyMarblesVR
             now[(int)Ctl.PBumper] = p.Valid && p.Bumper;
             now[(int)Ctl.OBumper] = o.Valid && o.Bumper;
 
-            // marble mode: L1 (bumper of the other hand) = throw faster, L2 (its trigger) tapped = slower.
-            // Holding L2 still does what it always does (build menu on the hand), so the menu stays reachable.
-            _menuHoldNow = false;
-            if (Grab.MarbleActive && !Game.InMenu)
-            {
-                bool pointerIsRight = Plugin.Cfg.PointerHand.Value == Hand.Right;
-                int l1 = (int)(pointerIsRight ? Ctl.OBumper : Ctl.PBumper);
-                int l2 = (int)(pointerIsRight ? Ctl.OTrigger : Ctl.PTrigger);
-                if (l2 == (int)Ctl.PTrigger) l2 = -1;   // left-handed laser: that trigger drops the marble, keep it
-                if (now[l1] && !_l1Was) StepLevel(+1);
-                _l1Was = now[l1];
-                now[l1] = false;
-                if (l2 >= 0)
-                {
-                    bool l2Now = now[l2];
-                    float t = Time.unscaledTime;
-                    if (l2Now && !_l2Was) { _l2DownAt = t; _l2PassOn = false; }
-                    if (l2Now && !_l2PassOn && t - _l2DownAt > 0.35f) { _l2PassOn = true; _menuHoldNow = true; }
-                    if (!l2Now && _l2Was && !_l2PassOn) StepLevel(-1);
-                    _l2Was = l2Now;
-                    now[l2] = l2Now && _l2PassOn;
-                }
-            }
-            else { _l1Was = _l2Was = _l2PassOn = false; }
-
             DetectGrabToggle(now);
 
             bool alt = false;
             for (int i = 0; i < now.Length; i++)
                 if (now[i] && Binding((Ctl)i, false) == VRAction.AltLayer) alt = true;
+            AltHeld = alt;
+            Array.Copy(now, _raw, now.Length);   // physical state, for the button labels
+
+            // marble mode: Y (upper) = throw faster, A (lower) = slower (one level per press); the game never sees these presses
+            bool pointerIsRight = Plugin.Cfg.PointerHand.Value == Hand.Right;
+            int btnA = (int)(pointerIsRight ? Ctl.PPrimary : Ctl.OPrimary), btnY = (int)Ctl.FrameY;
+            if (Grab.MarbleActive && !Game.InMenu && !alt)
+            {
+                if (now[btnA] && !_aWas) StepLevel(-1);
+                if (now[btnY] && !_yWas) StepLevel(+1);
+                _aWas = now[btnA]; _yWas = now[btnY];
+                now[btnA] = now[btnY] = false;
+            }
+            else { _aWas = now[btnA]; _yWas = now[btnY]; }
+
+            // off-hand grip: decide at press time whether it carries the menu or joins the world grab
+            int og = (int)Ctl.OGrip;
+            if (now[og] && !_ctl[og]) _leftGripWorld = PointerGrab;
 
             Array.Copy(_act, _actPrev, ActionCount);
             Array.Clear(_act, 0, ActionCount);
@@ -328,8 +328,45 @@ namespace CozyMarblesVR
 
         // ------------------------------------------------------------------ grab mode
 
-        bool _l1Was, _l2Was, _l2PassOn, _menuHoldNow;
-        float _l2DownAt;
+        bool _aWas, _yWas;
+        readonly bool[] _raw = new bool[(int)Ctl.Count];
+
+        /// <summary>The second layer (default: off-hand stick click held) is active.</summary>
+        public bool AltHeld { get; private set; }
+
+        /// <summary>Physical buttons and sticks of one controller, for the labels on the controller models.</summary>
+        public enum Part { Trigger, Grip, Bumper, Stick, A, B, X, Y, Menu, DpadUp, DpadDown, DpadLeft, DpadRight }
+
+        int CtlOf(bool rightController, Part part)
+        {
+            bool pointerIsRight = Plugin.Cfg.PointerHand.Value == Hand.Right;
+            bool pointerSide = rightController == pointerIsRight;
+            switch (part)
+            {
+                case Part.Trigger: return (int)(pointerSide ? Ctl.PTrigger : Ctl.OTrigger);
+                case Part.Grip: return (int)(pointerSide ? Ctl.PGrip : Ctl.OGrip);
+                case Part.Bumper: return (int)(pointerSide ? Ctl.PBumper : Ctl.OBumper);
+                case Part.Stick: return (int)(pointerSide ? Ctl.PStick : Ctl.OStick);
+                case Part.A: return (int)(pointerIsRight ? Ctl.PPrimary : Ctl.OPrimary);
+                case Part.B: return (int)(pointerIsRight ? Ctl.PSecondary : Ctl.OSecondary);
+                case Part.X: return (int)Ctl.FrameX;
+                case Part.Y: return (int)Ctl.FrameY;
+                case Part.Menu: return (int)(pointerSide ? Ctl.PMenu : Ctl.OMenu);
+                case Part.DpadUp: return (int)Ctl.DpadUp;
+                case Part.DpadDown: return (int)Ctl.DpadDown;
+                case Part.DpadLeft: return (int)Ctl.DpadLeft;
+                default: return (int)Ctl.DpadRight;
+            }
+        }
+
+        /// <summary>Is the physical button pressed right now?</summary>
+        public bool PartHeld(bool rightController, Part part) => _raw[CtlOf(rightController, part)];
+
+        /// <summary>What the button does right now (menus, second layer and bindings included).</summary>
+        public VRAction PartAction(bool rightController, Part part) => Binding((Ctl)CtlOf(rightController, part), AltHeld);
+
+        /// <summary>The pointer hand's grip currently moves the world.</summary>
+        public bool WorldGrabbed => PointerGrab || OffGrab;
 
         /// <summary>Throw level 0 (drop) .. 6, one step per press.</summary>
         static void StepLevel(int sign)
@@ -539,8 +576,13 @@ namespace CozyMarblesVR
             _hud.SetGrabLabel(Grab.Active);
             _hud.SetMarbleLabel(Grab.MarbleActive);
 
-            // left trigger (default): build menu - tap shows/hides it, hold carries it on the hand
-            _hud.MenuPanelButton(Held(VRAction.MenuPanel), Game.InMenu, _menuHoldNow);
+            // in-game menu: carried by the off-hand grip, folded with X; L2 cycles the tools (MenuPanel stays bindable)
+            _hud.MenuPanelButton(Held(VRAction.MenuPanel), Game.InMenu);
+            _hud.CarryMenu(Held(VRAction.MenuCarry) && !_leftGripWorld, Game.InMenu);
+            if (Down(VRAction.CycleTool) && !Game.InMenu) Grab.CycleTool();
+            if (Down(VRAction.ToggleIngameMenu) && !Game.InMenu) _hud.ToggleIngameMenu();
+            if (Down(VRAction.VRSettings)) _manager.ToggleVRSettings();
+            if (Down(VRAction.ResetMenu)) _manager.ResetMainMenu();
             ReleaseStaleMouseLock(dt);
 
             bool lmb = Held(VRAction.LeftClick), rmb = Held(VRAction.RightClick), mmb = Held(VRAction.MiddleClick);
@@ -649,6 +691,13 @@ namespace CozyMarblesVR
 
         Buttons:
             // marble mode: the trigger drops (or throws) a marble at the ball instead of clicking into the world
+            // menus, emergency: R2 into empty space puts you back at the start position
+            if (Game.InMenu && !OverUi && !_navActive && p.Valid && Down(VRAction.LeftClick))
+            {
+                Plugin.Log.LogInfo("Position reset (R2 outside the menu).");
+                _manager.Recenter();
+            }
+
             bool marbleTrigger = _act[(int)VRAction.LeftClick];
             if (Grab.MarbleActive && !OverUi && !_navActive && p.Valid && !Game.InMenu && !Game.Placing)
             {
@@ -766,6 +815,7 @@ namespace CozyMarblesVR
                 {
                     _hud.UpdateDrag(localRay, _tracking.HeadPos, PointerStick.y, dt);
                     MaskLeftClick();
+                    if (_hud.HandleDragging) { point = _rig.TransformPoint(_hud.HandleDragPoint(localRay)); return true; }
                     point = _rig.TransformPoint(_hud.RootPosition);
                     var plane = new Plane(_rig.TransformDirection(_hud.RootRotation * Vector3.forward), point);
                     if (plane.Raycast(ray, out float t)) point = ray.GetPoint(t);
@@ -799,6 +849,22 @@ namespace CozyMarblesVR
             var widget = _hud.HitWidget(ray, out Vector3 wHit, out float wDist);
             bool popup = onSettings || onHelp;
             float popupDist = Mathf.Min(onSettings ? sDist : float.MaxValue, onHelp ? hDist : float.MaxValue);
+
+            // the round buttons docked to the off-hand controller
+            var decor = _manager.Decor;
+            Vector3 rHit = default;
+            float rDist = float.MaxValue;
+            int ring = decor != null ? decor.HitRing(ray, out rHit, out rDist) : -1;
+            if (ring >= 0 && (!popup || rDist < popupDist) && (widget == HudPanel.Widget.None || rDist < wDist))
+            {
+                _hud.SetWidgetHover(HudPanel.Widget.None);
+                decor.SetHover(ring);
+                point = rHit;
+                if (down && _capture == Capture.None) { decor.Activate(ring); _capture = Capture.Swallow; }
+                if (_capture != Capture.None) MaskLeftClick();
+                return true;
+            }
+            decor?.SetHover(-1);
             if (popup && (widget == HudPanel.Widget.None || popupDist <= wDist))
             {
                 _hud.SetWidgetHover(HudPanel.Widget.None);

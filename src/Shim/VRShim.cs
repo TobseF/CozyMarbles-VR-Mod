@@ -199,14 +199,34 @@ namespace CozyMarblesVR
             return IsMousePoint(pos) ? PointerRay : ScreenPointToWorldRay(pos);
         }
 
+        // Every world point the game projected onto the virtual screen since the plugin last reset the list.
+        // Labels over objects (marble names, spawner info ...) are placed this way; the plugin uses the list to
+        // put each label back at the depth of its object instead of one flat layer.
+        public const int ProjectionCapacity = 512;
+        public static readonly Vector3[] ProjectedWorld = new Vector3[ProjectionCapacity];
+        public static readonly Vector3[] ProjectedScreen = new Vector3[ProjectionCapacity];
+        public static int ProjectedCount;
+
+        static Vector3 Project(Vector3 world)
+        {
+            Vector3 s = WorldToScreen(world);
+            if (ProjectedCount < ProjectionCapacity && s.z > 0f)
+            {
+                ProjectedWorld[ProjectedCount] = world;
+                ProjectedScreen[ProjectedCount] = s;
+                ProjectedCount++;
+            }
+            return s;
+        }
+
         public static Vector3 Camera_WorldToScreenPoint(Camera cam, Vector3 position)
         {
-            return IsWorldCamera(cam) ? WorldToScreen(position) : cam.WorldToScreenPoint(position);
+            return IsWorldCamera(cam) ? Project(position) : cam.WorldToScreenPoint(position);
         }
 
         public static Vector3 Camera_WorldToScreenPoint(Camera cam, Vector3 position, Camera.MonoOrStereoscopicEye eye)
         {
-            return IsWorldCamera(cam) ? WorldToScreen(position) : cam.WorldToScreenPoint(position, eye);
+            return IsWorldCamera(cam) ? Project(position) : cam.WorldToScreenPoint(position, eye);
         }
 
         public static Vector3 Camera_ScreenToWorldPoint(Camera cam, Vector3 position)

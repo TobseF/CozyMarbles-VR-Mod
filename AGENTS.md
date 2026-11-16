@@ -39,6 +39,7 @@ no Unity editor assets) → `VRManager` (one GameObject, `DontDestroyOnLoad`) �
 | `GameHooks.cs` | `Game` facade over game state (placing, placement plane, decorations) + Harmony patches |
 | `VRSettingsPanel.cs`, `VRHelpPanel.cs` | The mod's own world-space panels (hit-tested directly, no `GraphicRaycaster`) |
 | `ModeToggleButton.cs` | "VR x.y.z" label, main-menu entry, settings row, desktop hint – clones of the game's own UI |
+| `ControllerDecor.cs` | Icon plates on every physical button (mode-dependent, from `VRInput.PartAction`), the collar with round push buttons on the off-hand controller (tools, prepare/delete marbles, open menu, object options; laser or ball touch) |
 | `Tracking.cs`, `SteamFrameControllerProfile.cs`, `ControllerModels.cs` | Poses and buttons, native Steam Frame bindings, controller models from the user's SteamVR install |
 | `VRConfig.cs` | All BepInEx config entries (`BepInEx/config/tobse.cozymarbles.vr.cfg`), incl. `ConfigVersion` migrations |
 | `Icons.cs` + `Icons/*.png` | Menu artwork, embedded as resources; drawn by `build/make-icons.py` |
@@ -69,7 +70,7 @@ The game's code is the main reference – most features start with finding the r
 .\build\decompile.ps1 -Assembly TimR.Events.dll       # other assemblies from Cozy Marbles_Data\Managed
 ```
 
-Uses the ILSpy engine bundled with Visual Studio 2022. **Never commit decompiled code** (it is the game's code;
+Uses the ILSpy engine bundled with Visual Studio 2022. Run it with PowerShell 7 (`pwsh`, the agent's PowerShell tool) – Windows PowerShell 5 cannot load the decompiler. **Never commit decompiled code** (it is the game's code;
 keep it in `%TEMP%`). Then grep the output.
 
 Game conventions:
@@ -129,13 +130,16 @@ powershell -NoProfile -File build/diag.ps1 'grab on; wait 1; dump' -Grep 'launch
 
 The full list is in `Diagnostics.Execute`. The important ones:
 
+- Controller buttons: `aimring <glyph>` aims the laser at a collar button (`pointer`, `hand`, `marble`, `play`, `trash_marbles`, `menu_open`, `props`); `pokering <glyph> <above>` puts the ball of the right hand onto it – the ball sits 0.03 × world scale below the grip, so `above` depends on `[General] WorldScale` (the maintainer uses ~22, not 8).
 - Pointing: `aimpx x y` (UI texture pixel, origin bottom-left; main UI x 0..W, build toolbox W..2W, options 2W..3W,
-  top bar 3W..4W with W = `UiResolutionWidth`, default 2560), `aimwidget bar|corner|vr|bbar|bcorner|info|mvr|mgrab|mmarble|tile<name>`,
+  top bar 3W..4W with W = `UiResolutionWidth`, default 2560), `aimwidget bar|corner|vr|bbar|bcorner|info|mvr|mgrab|mmarble|bctl0|bctl1|tile<name> [dx dy]` (dx dy: metres along the widget's right / up),
   `aimsettings n`, `aimsethandle`, `aimworld x y z`, `aim yaw pitch`, `aimtag <tag> [i]`.
 - Buttons: `tap|down|up trigger|grip|a|b|x|y|ltrigger|lgrip|lb|rb|dup|...` (names in `Tracking.Simulate`), `stick lx ly rx ry`.
-- Hands/head: `handr|handl dx dy dz` (offset from the default pose), `aimfwd m` (simulated aim pose in front of the grip,
+- Hands/head: `handr|handl dx dy dz` (offset from the default pose), `handlrot pitch yaw roll` (turn the simulated
+  left controller, e.g. `handlrot -100 15 0` = button side facing you, tip up), `aimfwd m` (simulated aim pose in front of the grip,
   like a real controller), `head x y z yaw pitch` (mock headset), `recenter`.
-- State: `grab on|off`, `marble on|off`, `throw 0..6` (throw level), `physics on|off` (marble physics), `flat on|off`,
+- State: `tool 0|1|2` (pointer / hand / marble), `grab on|off`, `marble on|off`, `throw 0..6` (throw level), `physics on|off` (marble physics), `flat on|off`,
+  `spectator on|off`, `specscale x`, `eyeres <width>` (headset pixels per eye, 0 = SteamVR), `fps on|off`,
   `lockmouse` (sets the game's mouse lock, to test the stale-lock guard).
 - Output (`BepInEx/cozyvr-out/*.png`): `eyeshot` (headset view), `uishot` (main UI texture), `buildshot` (panel atlas),
   `overlayshot`, `handshot name l|r|b|m yaw pitch` (b = grab ball, m = newest marble with the whole scene), `shot` (desktop).
@@ -150,8 +154,16 @@ Undo anything you place. The game language follows the maintainer's setting (cur
 ### Pitfalls when testing
 
 - Desktop screen capture of the game window is black (GDI); use the in-game shot commands (or PrintWindow with flag 2).
-- `eyeshot` renders world and HUD layer with one camera, so world objects can cut through mod panels in the picture.
-  In the headset the HUD camera clears depth and panels are always on top.
+- `shot` (ScreenCapture) leaves out screen-space overlay canvases such as the spectator info banner. To see exactly
+  what the desktop window shows, capture it with `user32!PrintWindow` (flag 3, after `SetProcessDPIAware`).
+- `DesktopScreen` owns the desktop window in VR: spectator camera on/off (F11), rendered into a smaller texture for
+  `DesktopViewScale` < 1 (format without alpha – post-processing leaves alpha < 1 and the picture turned dark/flat),
+  and the "spectator view off" screen whose buttons are hit-tested with the real mouse.
+- Headset and spectator view: a base camera renders the world, an overlay camera the HUD layer (menus, laser,
+  hands, decals) without post-processing. The overlay camera keeps the world's depth (`m_ClearDepth = false`), and
+  the panel material writes depth with alpha clipping – menus are ordinary objects in the room. The spectator view
+  (PrintWindow) shows the same depth behaviour as the headset, so use it to check occlusion.
+- `eyeshot` renders world and HUD layer with one camera; good for content, not for judging depth.
 - In simulation the aim pose equals the grip pose, so the grab ball and throw cone sit inside the controller model –
   use `aimfwd 0.12` before judging their visibility.
 - World scale 8: a marble or pin is only a few pixels from head distance; use `handshot … m`/`… b` or the `dump` numbers.
@@ -205,4 +217,59 @@ Undo anything you place. The game language follows the maintainer's setting (cur
 - The game locks the mouse while the right button (B) turns the camera and only unlocks on the release frame; a missed
   frame leaves `InputManager.MouseLocked` set and the build menu ignores piece clicks (tabs still work).
   `VRInput.ReleaseStaleMouseLock` clears such a lock; check `game: mouseLocked=` in `dump` when clicks "do nothing".
+- Controller layout (ConfigVersion 6): L2 = next tool (in menus: menu back in front), both grips = world (move / scale),
+  X = build menu on/off, A/Y = throw level in marble mode, L1 = Shift, right Menu = main menu/pause (`PointerMenu`),
+  left View = VR settings (`OffMenu`), R2 into empty space in menus = position reset. The game's top bar and the mod's
+  menu buttons are gone from the panels (`LayoutBar` shows nothing): their functions are ring buttons in
+  `ControllerDecor` that press the game's own controls (`HudPanel.ClickTile`, `RollMarbleUi`, `DestroyAllMarbles`).
+  SteamVR ships every button as its own OBJ next to the controller model (same coordinate space) – `ControllerModels.Parts`
+  reads them for the button labels.
+- The main menu panel is cropped to its content (`ComputeCrop`, small gadgets at the right screen edge excluded) and
+  centred on it; the build menu is mounted rigidly on the off-hand controller (`ControllerDecor.TryGetMount`: past
+  the collar, in the plane of the controller's face, computed from the grip pose and the model's own axes `F`/`N`, not
+  from the grip axes – those turned it sideways once). The model's `F` points from the handle to the tip; held
+  pointing forward the face looks up, so the menu is a tray then and a tablet when the button side faces you.
+  Without controller models it falls back to floating above the hand, billboarded. Shown build menu = open game toolbox (`KeepToolboxInSync`).
+  `PlaceBuildControls` puts two `MiniButton` handles (resize at the corner, tilt above it; 2 cm regardless of the menu
+  scale) right of the toolbox's lower right corner, only while attached and the toolbox is open. Held, they run through
+  `BeginDrag`/`UpdateDrag`/`EndDrag` as `HandleDrag` (not `_dragPanel`, so the menu keeps following the hand): resize
+  scales about the lower edge centre so the held corner stays under the laser; tilt adds the change of the laser's
+  angle in the controller's tilt plane (`HandAngle`, basis `_mountFwd`/`-_mountFace` from the last `PlaceBuild`). Live
+  values sit in `_liveScale`/`_liveTilt` and go into the config only on release (no file write per frame).
+  Tilt `[HUD.BuildMenu] AttachedTiltTowardsYou` −75..75, 0 = flush with the ring, positive towards the viewer (the placement
+  formula uses the opposite sign); `SnapTilt` holds 0 within ±5° and catches up over the next 5° without a jump.
+  (Renamed from `AttachedTiltDegrees`, whose sign and zero differed – old values are not carried over.) While a handle is held the laser end comes
+  from `HandleDragPoint` (the generic drag used the main panel's plane, so the laser jumped to the screen centre);
+  while tilting, laser and reticle are hidden (`TiltDragging`).
+  Test the tilt with `aim yaw pitch` while `down trigger` is held: moving the aim point (`aimwidget bctl1 0 dy`) barely
+  turns a laser that comes from below, almost parallel to the menu.
+- Start: the player and the main menu are recentred as soon as the head pose is valid (not only when the headset
+  reports "worn" – that never happened for some sessions and left the player somewhere in the world).
+- Never draw menus "always on top" in VR. It looked fine on the monitor, but in the headset a panel painted over a
+  closer object gets occlusion cues ("in front") that contradict its stereo disparity ("behind"): both eyes disagree,
+  labels seem to sit beside their object, controller buttons poke through the build menu. The same goes for one
+  flat label layer at a fixed distance. Fixes in place: shared depth buffer, depth-writing panels, every world label
+  cut out of the label texture and placed at the world point the game projected it from (`VRShim.ProjectedWorld`,
+  recorded in `Camera_WorldToScreenPoint`), the menu viewpoint (`VRManager.UpdateMenuViewpoint`: step back/up while
+  a menu is blocked, chosen once per visit – the main menu's showcase run has moving parts) and
+  `HudPanel.KeepInFrontOfScenery` (pull the menu closer and shrink it as the last resort). Obstacle tests ignore
+  moving bodies (marbles) and volumes you are inside of (`LevelBounds`).
+- Headset resolution: URP copies its asset's `renderScale` into the XR display every frame, so
+  `XRSettings.eyeTextureResolutionScale` alone is silently reset to 1. `VRManager.ApplyRenderScale` first measures
+  SteamVR's recommended size (while the scale is still the game's own; the session may only start later, eye size
+  0 until then), then turns the chosen per-eye width (`EyeResolution`, presets in `VRManager.EyePresets`) into the URP
+  asset's `renderScale`; everything is restored when VR ends. `DesktopScreen` shrinks the spectator texture by the
+  same factor. `dump` prints `XR: eye=` and `urp:`. The game's resolution setting only sizes the desktop window.
+- The game's URP asset has the GPU Resident Drawer with GPU occlusion culling on. In VR (multi-pass, changed render
+  scale) parts of the scenery went missing in one eye only – most likely this culling (not confirmed in the headset
+  yet); `ApplyRenderScale` switches it off while VR runs.
+- The VR settings panel has two columns (one column was ~1.6 m tall and reached into the table once menus got depth).
+- Opaque things must be opaque: the collar, the tool base and the round button bodies use URP/Unlit (opaque, depth
+  writes, shading baked into UV.x and read from a grey ramp – the unlit shader ignores vertex colours). Only the flat
+  plates and icons are transparent (`Sprites/Default`). Transparent objects write no depth and are sorted per object by
+  distance: the collar used to cover the buttons on its far side, and the laser dot (drawn before the icons) was painted
+  over – laser and dot now render after the icons (queue Transparent + 30).
+- `ControllerDecor.HitRing` tests a sphere around each round button (the other hand's laser comes in at a slant and
+  slipped past the flat top); overlapping spheres are resolved by the closest centre. It runs in `HandleWidgets` before
+  the tools, so in hand mode the laser appears and the trigger clicks when it points at a round button.
 - Keep the README in sync with player-visible changes (controls, menus, settings).

@@ -30,7 +30,12 @@ namespace CozyMarblesVR
         Recenter,       // bring the HUD in front of you and reset the standing position
         AltLayer,       // hold to switch the face buttons to their "Alt" bindings
         MenuBack,       // used automatically for B while in menus: presses a visible back button, otherwise Escape
-        MenuPanel       // build menu: tap = show/hide, hold = carry it on the hand, release = it stays there
+        MenuPanel,      // build menu: tap = show/hide, hold = carry it on the hand, release = it stays there
+        CycleTool,      // next tool: pointer -> hand -> marbles -> pointer
+        MenuCarry,      // hold: the in-game menu follows this hand, release = it stays where it is
+        ToggleIngameMenu, // show / hide the build menu above the off-hand controller
+        VRSettings,     // open / close the VR settings
+        ResetMenu       // menus only: bring the menu back in front of you
     }
 
     public class VRConfig
@@ -38,6 +43,8 @@ namespace CozyMarblesVR
         public readonly ConfigEntry<bool> Enabled;
         public readonly ConfigEntry<float> WorldScale;
         public readonly ConfigEntry<float> RenderScale;
+        public readonly ConfigEntry<int> EyeResolution;
+        public readonly ConfigEntry<bool> ShowFps;
         public readonly ConfigEntry<bool> PostProcessing;
         public readonly ConfigEntry<bool> DepthOfField;
         public readonly ConfigEntry<bool> DesktopView;
@@ -52,6 +59,9 @@ namespace CozyMarblesVR
         public readonly ConfigEntry<bool> MarblePhysics;
         public readonly ConfigEntry<bool> FollowCameraYaw;
         public readonly ConfigEntry<bool> DesktopInput;
+        public readonly ConfigEntry<bool> DesktopHint;
+        public readonly ConfigEntry<float> DesktopViewScale;
+        public readonly ConfigEntry<string> SteamVRResolution;
 
         // UI panels (positions relative to where you stood/looked at the last recenter, in metres and degrees)
         public readonly ConfigEntry<int> UiResolution;
@@ -80,7 +90,7 @@ namespace CozyMarblesVR
 
         // Button bindings. "Pointer" is the hand holding the laser, "Off" the other one.
         public readonly ConfigEntry<VRAction> PointerTrigger, PointerGrip, PointerPrimary, PointerSecondary, PointerStickClick;
-        public readonly ConfigEntry<VRAction> OffTrigger, OffGrip, OffPrimary, OffSecondary, OffStickClick, OffMenu;
+        public readonly ConfigEntry<VRAction> OffTrigger, OffGrip, OffPrimary, OffSecondary, OffStickClick, OffMenu, PointerMenu;
         public readonly ConfigEntry<VRAction> PointerPrimaryAlt, PointerSecondaryAlt, PointerStickClickAlt;
         public readonly ConfigEntry<VRAction> OffPrimaryAlt, OffSecondaryAlt, OffStickClickAlt;
 
@@ -97,11 +107,16 @@ namespace CozyMarblesVR
         {
             Enabled = cfg.Bind("General", "Enabled", true, "Start the game in VR. Set to false (or start the game with -novr) to play on the monitor.");
             WorldScale = cfg.Bind("General", "WorldScale", 8f, "How many game metres one real metre covers. 1 = life size (the build area is 16 m wide), 8 = table-top model about 2 m wide. Can be changed in VR by holding both grips and moving the hands apart or together.");
-            RenderScale = cfg.Bind("General", "RenderScale", 1f, new ConfigDescription("Eye texture resolution multiplier.", new AcceptableValueRange<float>(0.5f, 2f)));
+            RenderScale = cfg.Bind("General", "RenderScale", 1f, new ConfigDescription("Not used any more (replaced by EyeResolution).", new AcceptableValueRange<float>(0.5f, 2f)));
+            EyeResolution = cfg.Bind("General", "EyeResolution", 0, "Headset render resolution: pixel width per eye (2160 = Steam Frame panel, 1920, 1728, 1536, 1344, 1152); the height follows SteamVR's aspect ratio. 0 = what SteamVR recommends (its per-app resolution setting). Also in the start window and the VR settings.");
+            ShowFps = cfg.Bind("General", "ShowFps", false, "Frame-rate readout in the headset (FPS, refresh rate, frame time, pixels per eye). Also in the VR settings.");
             PostProcessing = cfg.Bind("General", "PostProcessing", true, "Keep the game's post-processing (bloom, colour grading, outlines) in the headset. Turn off if performance is low.");
             DepthOfField = cfg.Bind("General", "DepthOfField", false, "Keep the game's depth-of-field blur. Off by default: in a headset it only makes the scene look out of focus.");
             ControllerModels = cfg.Bind("General", "ShowControllerModels", true, "Show the 3D models of the Steam Frame controllers (taken from your SteamVR installation) instead of simple boxes.");
             DesktopView = cfg.Bind("General", "DesktopView", true, "While in VR, show a calm spectator view in the desktop window (costs some GPU time). Off: the window stays black.");
+            DesktopHint = cfg.Bind("General", "DesktopHint", true, "Show the info banner at the bottom of the spectator view (F10 switches it in the game, e.g. for screen recordings).");
+            SteamVRResolution = cfg.Bind("General", "SteamVRResolution", "", "Written by the mod: the per-eye resolution SteamVR recommended at the last VR start (shown in the start window).");
+            DesktopViewScale = cfg.Bind("General", "DesktopViewScale", 1f, new ConfigDescription("Resolution of the spectator view relative to the desktop window (0.25 - 1). Lower = less GPU load; the headset image is not affected.", new AcceptableValueRange<float>(0.25f, 1f)));
             FollowCameraYaw = cfg.Bind("General", "FollowCameraYaw", true, "Rotate the play space together with the game's camera (menu transitions, marble tracking).");
             DesktopInput = cfg.Bind("General", "DesktopInputInVR", true, "Keep mouse buttons and keyboard working while in VR.");
 
@@ -130,7 +145,7 @@ namespace CozyMarblesVR
             AlwaysAttached = cfg.Bind(e, "AlwaysAttachedToHand", false, "Build menu always sits on the off-hand controller; the menu button only shows/hides it. Off: tap the button to show/hide, hold it to carry the menu, release to leave it in the room.");
             AttachedScale = cfg.Bind(e, "AttachedScale", 0.22f, "Size of the build menu while it is on the hand: metres per 1000 UI pixels (the open toolbox is about 1300 pixels wide).");
             OptionsScale = cfg.Bind("HUD.ObjectOptions", "Scale", 0.5f, "Size of the options panel that appears above a selected object (metres per 1000 UI pixels at 0.8 m distance; it keeps its apparent size).");
-            AttachedTilt = cfg.Bind(e, "AttachedTiltDegrees", 25f, "Tilt of the build menu on the hand (positive = top leans away).");
+            AttachedTilt = cfg.Bind(e, "AttachedTiltTowardsYou", 0f, new ConfigDescription("Tilt of the build menu on the controller in degrees (the tilt handle at its lower right corner sets it): 0 = flush with the controller's button ring, positive = its top tilts towards you, negative = away from you.", new AcceptableValueRange<float>(-75f, 75f)));
             EditScale = cfg.Bind(e, "Scale", 0.4f, "Size of the build menu while it lies in the room: metres per 1000 UI pixels. " + poseNote);
             EditX = cfg.Bind(e, "X", 0f, "");
             EditY = cfg.Bind(e, "Y", -0.55f, "");
@@ -160,12 +175,13 @@ namespace CozyMarblesVR
             PointerPrimary = cfg.Bind(b, "PointerPrimary", VRAction.Rotate, "Lower face button (A on the right hand).");
             PointerSecondary = cfg.Bind(b, "PointerSecondary", VRAction.RightClick, "Upper face button (B on the right hand).");
             PointerStickClick = cfg.Bind(b, "PointerStickClick", VRAction.ToggleSnap, "");
-            OffTrigger = cfg.Bind(b, "OffTrigger", VRAction.MenuPanel, "Default: build menu (tap = show/hide, hold = carry it on the hand).");
-            OffGrip = cfg.Bind(b, "OffGrip", VRAction.GrabWorld, "");
+            OffTrigger = cfg.Bind(b, "OffTrigger", VRAction.CycleTool, "L2. Default: next tool (pointer -> hand -> marbles).");
+            OffGrip = cfg.Bind(b, "OffGrip", VRAction.GrabWorld, "Default: hold = the in-game menu follows the hand, release = it stays there. While the other grip already holds the world, it scales/rotates the world instead.");
             OffPrimary = cfg.Bind(b, "OffPrimary", VRAction.BuildMenu, "Lower face button (X on the left hand).");
             OffSecondary = cfg.Bind(b, "OffSecondary", VRAction.Undo, "Upper face button (Y on the left hand).");
             OffStickClick = cfg.Bind(b, "OffStickClick", VRAction.AltLayer, "Hold to reach the Alt bindings below.");
-            OffMenu = cfg.Bind(b, "OffMenu", VRAction.Escape, "Menu / View button.");
+            OffMenu = cfg.Bind(b, "OffMenu", VRAction.VRSettings, "View button of the off hand (left). Default: VR settings.");
+            PointerMenu = cfg.Bind(b, "PointerMenu", VRAction.Escape, "Menu button of the pointer hand (right). Default: main menu / pause.");
 
             const string a = "Controls.Buttons.Alt";
             string altDesc = "Used while a button bound to AltLayer is held (by default: off-hand stick click).";
@@ -180,7 +196,7 @@ namespace CozyMarblesVR
             GrabMode = cfg.Bind("Grab", "GrabMode", false, "Grab mode instead of the mouse pointer: a small ball on the controller selects and carries pieces freely through the room, a transparent ghost shows where the piece would snap on release. Toggle in the left-hand menu or by double-tapping a bumper.");
             GrabReach = cfg.Bind("Grab", "Reach", 0.15f, new ConfigDescription("How far in front of the controller (metres, real size) pieces can be touched.", new AcceptableValueRange<float>(0.03f, 0.6f)));
             GrabHoldSeconds = cfg.Bind("Grab", "HoldSeconds", 0.12f, new ConfigDescription("How long the trigger is held on a piece before it is picked up.", new AcceptableValueRange<float>(0.0f, 1f)));
-            GrabToggleBumper = cfg.Bind("Grab", "ToggleBumper", BumperChoice.Left, "Double-tap this bumper to switch between pointer and grab mode (Left = Shift key bumper, Right = roll marbles bumper).");
+            GrabToggleBumper = cfg.Bind("Grab", "ToggleBumper", BumperChoice.None, "Double-tap this bumper to switch between pointer and grab mode (Left = Shift key bumper, Right = roll marbles bumper).");
             GrabGhost = cfg.Bind("Grab", "ShowGhost", true, "Show a transparent preview of where the carried piece will snap.");
             MarbleMode = cfg.Bind("Grab", "MarbleMode", false, "Marble mode (hand mode only): the trigger drops a marble at the ball on the controller instead of grabbing pieces. Toggle with the marble button in the left-hand menu.");
             ThrowLevel = cfg.Bind("Grab", "ThrowLevel", 0, new ConfigDescription("Marble mode: 0 = the marble just drops, 1..6 = it is thrown in the pointing direction, 6 being the fastest (3 m/s real size). A small cone on the marble shows the direction, a dial on the controller the level. L1 / L2 change it.", new AcceptableValueRange<int>(0, 6)));
@@ -188,7 +204,7 @@ namespace CozyMarblesVR
             MenuNavigation = cfg.Bind("Controls", "MenuNavigation", true, "In menus (main menu, pause): move a focus cursor with the D-pad or the off-hand stick, select with A, go back with B. The laser keeps working.");
 
             const string f = "Controls.Buttons.SteamFrame";
-            FrameX = cfg.Bind(f, "ButtonX", VRAction.BuildMenu, "Only with the native Steam Frame profile. In menus the D-pad moves the focus cursor instead of these bindings.");
+            FrameX = cfg.Bind(f, "ButtonX", VRAction.ToggleIngameMenu, "Only with the native Steam Frame profile. In menus the D-pad moves the focus cursor instead of these bindings.");
             FrameY = cfg.Bind(f, "ButtonY", VRAction.Delete, "");
             DpadUp = cfg.Bind(f, "DpadUp", VRAction.HeightUp, "");
             DpadDown = cfg.Bind(f, "DpadDown", VRAction.HeightDown, "");
@@ -223,6 +239,26 @@ namespace CozyMarblesVR
                 // object options (colour picker, spawner settings) were too small in the headset
                 OptionsScale.BoxedValue = OptionsScale.DefaultValue;
                 ConfigVersion.Value = 4;
+            }
+            if (ConfigVersion.Value < 5)
+            {
+                // new controller layout: L-grip carries the in-game menu, L2 cycles the tools, X shows/hides the menu
+                if (OffTrigger.Value == VRAction.MenuPanel) OffTrigger.Value = VRAction.CycleTool;
+                if (OffGrip.Value == VRAction.GrabWorld) OffGrip.Value = VRAction.MenuCarry;
+                if (FrameX.Value == VRAction.BuildMenu) FrameX.Value = VRAction.ToggleIngameMenu;
+                GrabToggleBumper.Value = BumperChoice.None;
+                ConfigVersion.Value = 5;
+            }
+            if (ConfigVersion.Value < 6)
+            {
+                // the build menu now always floats above the off-hand controller: the grip grabs the world again,
+                // the view button opens the VR settings (the main menu moved to the right menu button)
+                if (OffGrip.Value == VRAction.MenuCarry) OffGrip.Value = VRAction.GrabWorld;
+                if (OffMenu.Value == VRAction.Escape) OffMenu.Value = VRAction.VRSettings;
+                // the main menu is only the menu itself now and opens in front of you
+                foreach (var entry in new ConfigEntryBase[] { MenuX, MenuY, MenuZ, MenuYaw, MenuPitch })
+                    entry.BoxedValue = entry.DefaultValue;
+                ConfigVersion.Value = 6;
             }
         }
     }

@@ -31,6 +31,7 @@ Move-Item "$cmdFile.tmp" $cmdFile -Force
 
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 while (-not (Select-String -Path $log -Pattern $marker -SimpleMatch -Quiet)) {
+    if (-not (Get-Process 'Cozy Marbles' -ErrorAction SilentlyContinue)) { 'game exited'; break }   # e.g. after "quit"
     if ((Get-Date) -gt $deadline) {
         Remove-Item $cmdFile -ErrorAction SilentlyContinue   # do not leave commands behind for a later start
         throw "Timed out after $TimeoutSeconds s (game still loading, or the commands take longer than -TimeoutSeconds?)"

@@ -176,6 +176,7 @@ namespace CozyMarblesVR
             {
                 Right.GripPos = Right.AimPos = Right.GripPos + SimOverride.RightHandOffset;
                 Left.GripPos = Left.AimPos = Left.GripPos + SimOverride.LeftHandOffset;
+                Left.GripRot = Left.AimRot = HeadRot * Quaternion.Euler(SimOverride.LeftHandEuler);
                 // scripted input from the diagnostics command file
                 if (SimOverride.HasAimWorld && Rig != null)
                 {
@@ -197,6 +198,7 @@ namespace CozyMarblesVR
                 Left.Secondary = SimOverride.Button("y");
                 Left.StickClick = SimOverride.Button("lstick");
                 Left.Menu = SimOverride.Button("menu");
+                Right.Menu = SimOverride.Button("rmenu");
                 Left.Stick = SimOverride.LeftStick;
                 // Steam Frame extras
                 Right.ButtonX = SimOverride.Button("fx");

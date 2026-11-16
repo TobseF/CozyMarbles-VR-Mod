@@ -42,6 +42,7 @@ namespace CozyMarblesVR
         float _yawOffset;
         float _heldYaw;
         bool _needRecenter = true;
+        float _startRecenterAt = -1f;
         bool _recenterHud;
         bool _wasWorn, _recenterPending;
         float _wornSince;
@@ -63,6 +64,10 @@ namespace CozyMarblesVR
         public HudPanel Hud => _hud;
         public VRInput VrInput => _input;
         public MarbleLauncher Launcher => _launcher;
+        public ControllerDecor Decor => _decor;
+        readonly DesktopScreen _desktop = new DesktopScreen();
+        readonly FpsCounter _fps = new FpsCounter();
+        ControllerDecor _decor;
         public VRSettingsPanel Settings => _settings;
         public VRHelpPanel Help => _help;
         public Tracking Tracked => _tracking;
@@ -80,6 +85,7 @@ namespace CozyMarblesVR
             _settings = new VRSettingsPanel(_rig, _hud);
             _help = new VRHelpPanel(_rig);
             _input = new VRInput(_tracking, _hud, _rig, this);
+            _decor = new ControllerDecor(_input, _hud);
             _tracking.Rig = _rig;
             if (Plugin.Cfg.Diagnostics.Value) _diag = new Diagnostics(this);
             CreateVisuals();
@@ -129,6 +135,9 @@ namespace CozyMarblesVR
         {
             _laserMat = ColorMaterial(new Color(0.35f, 0.85f, 1f, 0.85f));
             _reticleMat = ColorMaterial(new Color(1f, 1f, 1f, 0.95f));
+            // after the icons on the controller buttons (queue +22/+23): the dot was drawn first and the button's
+            // icon painted over it, so pointing at a round button showed no dot
+            _laserMat.renderQueue = _reticleMat.renderQueue = (int)RenderQueue.Transparent + 30;
             _handMat = ColorMaterial(new Color(0.9f, 0.9f, 0.95f, 0.7f));
 
             var lg = new GameObject("CozyVR Laser") { layer = HudPanel.HudLayer };
@@ -173,6 +182,14 @@ namespace CozyMarblesVR
             return f != null ? (int)f.GetValue(data) : -1;
         }
 
+        /// <summary>The overlay camera's "Clear Depth" switch (read-only in the API, a serialized field behind it).</summary>
+        static void SetClearDepth(UniversalAdditionalCameraData data, bool clear)
+        {
+            var f = typeof(UniversalAdditionalCameraData).GetField("m_ClearDepth", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (f != null) f.SetValue(data, clear);
+            else Plugin.Log.LogWarning("URP camera data has no m_ClearDepth field; menus are drawn on top of the world.");
+        }
+
         void Activate(Camera gameCam)
         {
             _gameCam = gameCam;
@@ -212,18 +229,21 @@ namespace CozyMarblesVR
             dst.dithering = src.dithering;
             dst.allowXRRendering = true;
 
-            // --- overlay camera for panel, laser and hands (always on top, not post-processed)
+            // --- overlay camera for panel, laser and hands (not post-processed). It keeps the world's depth buffer:
+            // panels are ordinary objects in the room, so whatever stands in front of them covers them. Drawing them
+            // "always on top" made both eyes disagree with the occlusion (wrong-looking stereo).
             var hudGo = new GameObject("CozyVR HUD Camera");
             hudGo.transform.SetParent(headGo.transform, false);
             _hudCam = hudGo.AddComponent<Camera>();
             _hudCam.cullingMask = 1 << HudPanel.HudLayer;
-            _hudCam.clearFlags = CameraClearFlags.Depth;
+            _hudCam.clearFlags = CameraClearFlags.Nothing;
             _hudCam.nearClipPlane = _vrCam.nearClipPlane;
             _hudCam.farClipPlane = _vrCam.farClipPlane;
             _hudCam.allowHDR = _vrCam.allowHDR;
             _hudCam.allowMSAA = _vrCam.allowMSAA;
             var hudData = _hudCam.GetUniversalAdditionalCameraData();
             hudData.renderType = CameraRenderType.Overlay;
+            SetClearDepth(hudData, false);
             hudData.renderPostProcessing = false;
             hudData.renderShadows = false;
             hudData.allowXRRendering = true;
@@ -231,7 +251,7 @@ namespace CozyMarblesVR
             dst.cameraStack.Add(_hudCam);
 
             // --- desktop window: a spectator view instead of the (black) XR mirror
-            if (Plugin.Cfg.DesktopView.Value)
+            // (always created; DesktopScreen switches it on/off at run time and may render it at a lower resolution)
             {
                 var deskGo = new GameObject("CozyVR Desktop View");
                 DontDestroyOnLoad(deskGo);
@@ -241,7 +261,8 @@ namespace CozyMarblesVR
                 _deskCam.stereoTargetEye = StereoTargetEyeMask.None;
                 _deskCam.depth = 10f;
                 _deskCam.rect = new Rect(0f, 0f, 1f, 1f);
-                _deskCam.cullingMask = _vrCam.cullingMask | (1 << HudPanel.HudLayer);
+                // world only: the menus, laser and hands come from an overlay camera (as in the headset)
+                _deskCam.cullingMask = _vrCam.cullingMask & ~(1 << HudPanel.HudLayer);
                 _deskCam.allowMSAA = false;
                 var deskData = _deskCam.GetUniversalAdditionalCameraData();
                 deskData.renderType = CameraRenderType.Base;
@@ -254,6 +275,23 @@ namespace CozyMarblesVR
                 deskData.requiresColorOption = src.requiresColorOption;
                 deskData.requiresDepthOption = src.requiresDepthOption;
                 deskGo.transform.SetPositionAndRotation(headGo.transform.position, headGo.transform.rotation);
+
+                // menus, laser and hands in an overlay camera that keeps the world's depth, exactly like the headset
+                var deskHudGo = new GameObject("CozyVR Desktop HUD");
+                deskHudGo.transform.SetParent(deskGo.transform, false);
+                _deskHudCam = deskHudGo.AddComponent<Camera>();
+                _deskHudCam.cullingMask = 1 << HudPanel.HudLayer;
+                _deskHudCam.clearFlags = CameraClearFlags.Nothing;
+                _deskHudCam.stereoTargetEye = StereoTargetEyeMask.None;
+                _deskHudCam.allowMSAA = false;
+                var deskHudData = _deskHudCam.GetUniversalAdditionalCameraData();
+                deskHudData.renderType = CameraRenderType.Overlay;
+                SetClearDepth(deskHudData, false);
+                deskHudData.renderPostProcessing = false;
+                deskHudData.renderShadows = false;
+                deskHudData.allowXRRendering = false;
+                deskHudData.SetRenderer(RendererIndex(src));
+                deskData.cameraStack.Add(_deskHudCam);
             }
 
             // --- UI into the panel texture
@@ -271,12 +309,121 @@ namespace CozyMarblesVR
             VRShim.Active = true;
             _active = true;
             _needRecenter = true;
+            _startRecenterAt = -1f;
 
-            float rs = Plugin.Cfg.RenderScale.Value;
-            if (Mathf.Abs(rs - 1f) > 0.01f) XRSettings.eyeTextureResolutionScale = rs;
+            ApplyRenderScale();
 
             var display = XRBootstrap.Display;
             Plugin.Log.LogInfo($"VR active. Eye texture {XRSettings.eyeTextureWidth}x{XRSettings.eyeTextureHeight}, refresh {(display != null && display.TryGetDisplayRefreshRate(out float hz) ? hz.ToString("F0") : "?")} Hz, device '{XRSettings.loadedDeviceName}', world scale {_scale:F1}.");
+        }
+
+        // ------------------------------------------------------------------ headset resolution
+
+        /// <summary>Per-eye widths offered: the Steam Frame panel (2160 × 2160 per eye – more is never shown) and five
+        /// steps below it. 0 = whatever SteamVR recommends (its per-app resolution).</summary>
+        public static readonly int[] EyePresets = { 1152, 1344, 1536, 1728, 1920, 2160, 0 };   // 0 = SteamVR's own size, listed last so that right is always larger
+        public const int FramePanel = 2160;
+
+        /// <summary>The per-eye resolution SteamVR recommends (from this run or, before VR started, the last one).</summary>
+        public static Vector2Int SteamVREye = ParseEye(Plugin.Cfg?.SteamVRResolution.Value);
+        static bool _steamVrKnown;      // SteamVREye was measured in this VR run
+
+        float _appliedRenderScale = -1f;
+        float _gameRenderScale = -1f;   // the pipeline asset's own values, restored when VR ends
+        bool _gameGpuOcclusion;
+
+        public static Vector2Int ParseEye(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return Vector2Int.zero;
+            var p = s.Split('x');
+            return p.Length == 2 && int.TryParse(p[0], out int w) && int.TryParse(p[1], out int h) ? new Vector2Int(w, h) : Vector2Int.zero;
+        }
+
+        /// <summary>Pixels per eye a preset gives (the height keeps SteamVR's aspect ratio; square when unknown).</summary>
+        public static Vector2Int PresetSize(int preset)
+        {
+            var rec = SteamVREye;
+            if (preset <= 0) return rec;
+            float aspect = rec.x > 0 ? rec.y / (float)rec.x : 1f;
+            return new Vector2Int(preset, Mathf.RoundToInt(preset * aspect));
+        }
+
+        /// <summary>Text for a preset, e.g. "2160 × 2160 (Steam Frame)" or "SteamVR (4216 × 4216)".</summary>
+        public static string PresetText(int preset, bool brief = false)
+        {
+            if (preset <= 0)
+                return brief ? "SteamVR" : SteamVREye.x > 0 ? $"SteamVR ({SteamVREye.x} × {SteamVREye.y})" : Loc.T("SteamVR-Vorgabe", "SteamVR default");
+            var s = PresetSize(preset);
+            return $"{s.x} × {s.y}" + (preset == FramePanel && !brief ? " (Steam Frame)" : "");
+        }
+
+        /// <summary>Next / previous entry of the preset list (an unknown value counts as the nearest one).</summary>
+        public static int StepPreset(int current, int step)
+        {
+            int i = Array.IndexOf(EyePresets, current);
+            if (i < 0)
+            {
+                i = 0; int best = int.MaxValue;
+                for (int k = 0; k < EyePresets.Length - 1; k++)
+                {
+                    int d = Mathf.Abs(EyePresets[k] - current);
+                    if (d < best) { best = d; i = k; }
+                }
+            }
+            return EyePresets[Mathf.Clamp(i + step, 0, EyePresets.Length - 1)];
+        }
+
+        /// <summary>
+        /// The eye texture is what SteamVR recommends times URP's render scale: URP hands its asset's renderScale to
+        /// the XR display every frame (XRSettings.eyeTextureResolutionScale alone is overwritten). SteamVR's size is
+        /// measured first, while the scale is still the game's own; then the chosen preset becomes a scale.
+        /// The GPU occlusion culling of the game's pipeline is switched off in VR: with two eye passes and a changed
+        /// render scale it hid whole parts of the scenery in one eye.
+        /// </summary>
+        void ApplyRenderScale()
+        {
+            if (!(GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset urp)) return;
+            if (_gameRenderScale < 0f)
+            {
+                _gameRenderScale = urp.renderScale;
+                _gameGpuOcclusion = urp.gpuResidentDrawerEnableOcclusionCullingInCameras;
+                if (_gameGpuOcclusion)
+                {
+                    urp.gpuResidentDrawerEnableOcclusionCullingInCameras = false;
+                    Plugin.Log.LogInfo("GPU occlusion culling off while in VR.");
+                }
+            }
+            if (!_steamVrKnown)
+            {
+                int ew = XRSettings.eyeTextureWidth, eh = XRSettings.eyeTextureHeight;
+                if (ew <= 0 || eh <= 0) return;     // the session does not run yet (headset not connected)
+                float cur = Mathf.Max(0.05f, urp.renderScale);
+                SteamVREye = new Vector2Int(Mathf.RoundToInt(ew / cur), Mathf.RoundToInt(eh / cur));
+                _steamVrKnown = true;
+                Plugin.Cfg.SteamVRResolution.Value = $"{SteamVREye.x}x{SteamVREye.y}";
+                Plugin.Log.LogInfo($"SteamVR recommends {SteamVREye.x}x{SteamVREye.y} per eye.");
+                if (SteamVREye.x > FramePanel * 1.5f)
+                    Plugin.Log.LogWarning($"SteamVR asks for {SteamVREye.x}x{SteamVREye.y} per eye – far more than the Steam Frame shows. Pick a resolution in the VR settings or lower it in SteamVR.");
+            }
+            int preset = Plugin.Cfg.EyeResolution.Value;
+            float rs = preset <= 0 || SteamVREye.x <= 0 ? 1f : Mathf.Clamp(preset / (float)SteamVREye.x, 0.1f, 2f);
+            if (Mathf.Abs(_appliedRenderScale - rs) < 0.001f) return;
+            _appliedRenderScale = rs;
+            urp.renderScale = rs;
+            var size = PresetSize(preset);
+            Plugin.Log.LogInfo($"Headset resolution {size.x}x{size.y} per eye (render scale {rs:0.000} of SteamVR's {SteamVREye.x}x{SteamVREye.y}).");
+        }
+
+        void RestoreRenderScale()
+        {
+            if (_gameRenderScale >= 0f && GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset urp)
+            {
+                urp.renderScale = _gameRenderScale;
+                urp.gpuResidentDrawerEnableOcclusionCullingInCameras = _gameGpuOcclusion;
+            }
+            _gameRenderScale = -1f;
+            _appliedRenderScale = -1f;
+            _steamVrKnown = false;      // SteamVR's setting may change before the next VR start
         }
 
         void Deactivate()
@@ -284,8 +431,9 @@ namespace CozyMarblesVR
             _notVisibleSince = -1f;
             if (!_active) return;
             _active = false;
+            RestoreRenderScale();
             if (_deskCam != null) Destroy(_deskCam.gameObject);
-            _deskCam = null;
+            _deskCam = _deskHudCam = null;
             _settings.Close();
             _help.Close();
             VRShim.Active = false;
@@ -331,19 +479,41 @@ namespace CozyMarblesVR
 
         /// <summary>The button next to the version number.</summary>
 /// <summary>Opens (or closes) the VR settings next to the main menu panel, e.g. from the game's main menu.</summary>
-        public void ToggleSettingsAtMainMenu()
+public void ToggleSettingsAtMainMenu() => ToggleVRSettings();
+
+        bool _settingsFromMenu;
+
+        /// <summary>
+        /// VR settings on/off. In menus they take the main menu's place (the main menu is hidden meanwhile, closing
+        /// them brings it back); during play they open in front of you.
+        /// </summary>
+        public void ToggleVRSettings()
         {
             if (!_active) return;
             if (_settings.Open) { _settings.Close(); return; }
-            // the main menu panel is wide: open right in front of the viewer, a little to the right of the menu buttons
             Vector3 head = _tracking.HeadPos;
+            _settingsFromMenu = Game.InMenu;
+            if (_settingsFromMenu && _hud.Visible)
+            {
+                _settings.ShowAt(_hud.MainCenter, head);
+                return;
+            }
             Vector3 f = _tracking.HeadRot * Vector3.forward; f.y = 0f;
             f = f.sqrMagnitude > 1e-4f ? f.normalized : Vector3.forward;
-            Vector3 right = Vector3.Cross(Vector3.up, f);
-            _settings.ShowAt(head + f * 1.1f + right * 0.25f - Vector3.up * 0.1f, head);
+            _settings.ShowAt(head + f * 1.0f - Vector3.up * 0.15f, head);
         }
 
-                public void ToggleMode()
+        /// <summary>Emergency: the main menu straight in front of you again, at the default distance.</summary>
+        public void ResetMainMenu()
+        {
+            if (!_active) return;
+            _hud.SetFrame(_tracking.HeadPos, _tracking.HeadRot);
+            _hud.ResetMenuPose();
+            if (_settings.Open && _settingsFromMenu) { _settings.Close(); ToggleVRSettings(); }
+            Plugin.Log.LogInfo("Main menu reset in front of the player.");
+        }
+
+        public void ToggleMode()
         {
             if (_userFlat) SetFlat(false);
             else SetFlat(true);
@@ -431,6 +601,13 @@ namespace CozyMarblesVR
                 return;
             }
             if (Input.GetKeyDown(KeyCode.F9)) ToggleMode();
+            // F10: hide / show the info banner of the spectator view (screen recordings)
+            if (Input.GetKeyDown(KeyCode.F10)) Plugin.Cfg.DesktopHint.Value = !Plugin.Cfg.DesktopHint.Value;
+            // F11: spectator view on / off (off saves the third picture of the world)
+            if (Input.GetKeyDown(KeyCode.F11)) Plugin.Cfg.DesktopView.Value = !Plugin.Cfg.DesktopView.Value;
+            if (_active) ApplyRenderScale();
+            _desktop.Tick(_deskCam, _active);
+            _fps.Tick(_vrCam != null ? _vrCam.transform : null, _active);
 
             bool running = XRBootstrap.Running;
             bool visible = running && XRBootstrap.Visible;
@@ -465,7 +642,21 @@ namespace CozyMarblesVR
             _tracking.UpdateHead();
             _tracking.UpdateHands();
 
-            // Centre the player on the game's camera whenever the headset is put on (and once at start).
+            // At start: centre the player on the game's camera and put the main menu in front, as soon as the head
+            // pose is known - wherever the player stands in the room and even if the headset says it is not worn.
+            if (_needRecenter && _tracking.HeadValid)
+            {
+                if (_startRecenterAt < 0f) _startRecenterAt = Time.unscaledTime + 0.5f;
+                else if (Time.unscaledTime >= _startRecenterAt)
+                {
+                    _needRecenter = false;
+                    _recenterPending = false;
+                    Recenter();
+                    _hud.ResetMenuPose();
+                    Plugin.Log.LogInfo("Start: player and main menu centred.");
+                }
+            }
+            // Centre the player on the game's camera whenever the headset is put on again.
             if (_tracking.HeadWorn)
             {
                 if (!_wasWorn) _wornSince = Time.unscaledTime;
@@ -481,12 +672,17 @@ namespace CozyMarblesVR
 
             UpdateRig();
             ApplyHeadPose();
+            _hud.HideMain = _settings.Open && _settingsFromMenu && Game.InMenu;
             _hud.Tick(_tracking, _input.OffHandState, Game.InMenu);
+            UpdateMenuViewpoint();
             UpdateVirtualScreen();
             _hud.PlaceOverlay();
             _input.Process(dt);
             _settings.Refresh();
             UpdateVisuals();
+            // labels and push buttons on the controller models (once per frame: it animates and handles pokes)
+            _decor.Tick(_handModels ? _handL : null, _handModels ? _handR : null, _active, Game.InMenu,
+                _input.Grab.Tip, _input.Grab.Active && !_input.NavActive, Time.unscaledDeltaTime);
         }
 
         // ------------------------------------------------------------------ virtual screen
@@ -576,7 +772,7 @@ namespace CozyMarblesVR
             UpdateDesktopView();
         }
 
-        Camera _deskCam;
+        Camera _deskCam, _deskHudCam;
         float _deskLast;
 
         /// <summary>Follows the head with a little smoothing and without roll, so the desktop picture is calm.</summary>
@@ -592,6 +788,12 @@ namespace CozyMarblesVR
             float aspect = Mathf.Max(0.1f, _deskCam.aspect);
             _deskCam.fieldOfView = aspect >= 1f ? 65f : Camera.HorizontalToVerticalFieldOfView(75f, aspect);
             _deskCam.nearClipPlane = _vrCam.nearClipPlane;
+            if (_deskHudCam != null)
+            {
+                _deskHudCam.fieldOfView = _deskCam.fieldOfView;
+                _deskHudCam.nearClipPlane = _deskCam.nearClipPlane;
+                _deskHudCam.farClipPlane = _deskCam.farClipPlane;
+            }
         }
 
         /// <summary>Places the play space so that the anchored head position sits at the game's camera.</summary>
@@ -605,7 +807,60 @@ namespace CozyMarblesVR
 
             Quaternion rot = Quaternion.Euler(DebugRigTilt.x, yaw + _yawOffset + DebugRigTilt.y, 0f);
             _rig.localScale = Vector3.one * _scale;
-            _rig.SetPositionAndRotation(cam.position - rot * (_anchor * _scale), rot);
+            _rig.SetPositionAndRotation(cam.position - rot * ((_anchor - _menuOffset) * _scale), rot);
+        }
+
+        // ------------------------------------------------------------------ menu viewpoint
+
+        Vector3 _menuOffset;        // tracking space: where you stand while a menu is open, relative to the normal place
+        float _nextMenuCheck;
+        bool _menuChosen;               // a viewpoint was picked for this menu visit (moving parts must not make it wander)
+        Vector3 _menuChosenHead, _menuChosenPanel;
+        // at most 1.2 m back and 0.4 m up: further away you would end up in another room (or outside the house)
+        static readonly float[] MenuBack = { 0f, 0.15f, 0.3f, 0.45f, 0.6f, 0.8f, 1.0f, 1.2f };
+        static readonly float[] MenuUp = { 0f, 0.1f, 0.2f, 0.3f, 0.4f };
+
+        /// <summary>
+        /// Menus are objects in the room, so scenery between you and the main menu would cover it (in the game's
+        /// main menu the showcase marble run stands right in front of the camera). While a menu is open you step
+        /// back (and up) just far enough that nothing stands between you and the menu. Back to normal once the menu closes.
+        /// </summary>
+        void UpdateMenuViewpoint()
+        {
+            if (!_active || !Game.InMenu || !_hud.MainIsMenu)
+            {
+                if (!Game.InMenu) { _menuOffset = Vector3.zero; _menuChosen = false; }
+                return;
+            }
+            if (Time.unscaledTime < _nextMenuCheck) return;
+            _nextMenuCheck = Time.unscaledTime + 0.5f;
+            Vector3 head = _tracking.HeadPos;
+            // keep the chosen place until you walk away from it or move the menu
+            if (_menuChosen && (head - _menuChosenHead).sqrMagnitude < 0.09f && (_hud.MainBasePos - _menuChosenPanel).sqrMagnitude < 0.0025f) return;
+            _menuChosen = true;
+            _menuChosenHead = head;
+            _menuChosenPanel = _hud.MainBasePos;
+            const float behind = 0.1f;
+            if (_hud.NearestObstacle(head, Vector3.zero, behind) >= 1f) return;
+
+            Vector3 back = -_hud.MainDirection(head);
+            Vector3 best = _menuOffset; float bestFree = -1f, bestCost = float.MaxValue;
+            foreach (float b in MenuBack)
+            foreach (float u in MenuUp)
+            {
+                Vector3 candidate = back * b + Vector3.up * u;
+                Vector3 shift = candidate - _menuOffset;
+                if (!_hud.PathFree(head, shift)) continue;
+                float free = _hud.NearestObstacle(head, shift, behind);
+                float cost = b + u * 1.5f;
+                if (free >= 1f) { if (cost < bestCost || bestFree < 1f) { best = candidate; bestCost = cost; bestFree = 1f; } }
+                else if (bestFree < 1f && free > bestFree) { best = candidate; bestFree = free; }
+            }
+            if (best != _menuOffset)
+            {
+                if (Plugin.Cfg.Diagnostics.Value) Plugin.Log.LogInfo($"Menu viewpoint: {_menuOffset} -> {best} (free {bestFree:0.00})");
+                _menuOffset = best;
+            }
         }
 
         /// <summary>Makes the current head position and viewing direction the new "centre".</summary>
@@ -625,9 +880,11 @@ namespace CozyMarblesVR
             bool grabMode = show && _input.Grab.Active && !_input.NavActive;
             bool grab = grabMode && !_input.OverUi;
             bool marbles = grabMode && _input.Grab.MarbleActive;
-            bool showLaser = show && !_input.NavActive && !grab;
+            // turning the build menu with the tilt handle: the hand's direction is the input, a laser would only distract
+            bool tilting = _hud != null && _hud.TiltDragging;
+            bool showLaser = show && !_input.NavActive && !grab && !tilting;
             if (_laser.enabled != showLaser) _laser.enabled = showLaser;
-            if (_reticle.gameObject.activeSelf != show) _reticle.gameObject.SetActive(show);
+            if (_reticle.gameObject.activeSelf != (show && !tilting)) _reticle.gameObject.SetActive(show && !tilting);
 
             // switching between pointer and hand mode: the ball pops up (or vanishes) right away, with a short pulse
             bool grabNow = _input.Grab.Active;
@@ -733,14 +990,19 @@ namespace CozyMarblesVR
         public Vector3 DebugPanelPoint(float x, float y) => _hud.PixelToWorld(new Vector2(x, y));
 
         /// <summary>World position of a point on the mod's own widgets (diagnostics): bar, corner, vr; "b" prefix = build panel.</summary>
-        public Vector3 DebugWidgetPoint(string name) => _hud.DebugWidgetPoint(name);
+        public Vector3 DebugWidgetPoint(string name, Vector2 offset = default)
+        {
+            Vector3 p = _hud.DebugWidgetPoint(name, out Quaternion rot);
+            var rig = _hud.RigTransform;
+            return p + (rig != null ? rig.TransformVector(rot * (Vector3)offset) : rot * (Vector3)offset);
+        }
 
         public string DebugState()
         {
             return $"rig: pos={_rig.position} rot={_rig.eulerAngles} scale={_scale:F2} anchor={_anchor} yawOffset={_yawOffset:F1} head(local)={_tracking.HeadPos}/{_tracking.HeadRot.eulerAngles} headValid={_tracking.HeadValid} sim={_tracking.Simulated}\n" +
                    $"hands: L valid={_tracking.Left.Valid} pos={_tracking.Left.GripPos} | R valid={_tracking.Right.Valid} pos={_tracking.Right.GripPos} aimRot={_tracking.Right.AimRot.eulerAngles} trig={_tracking.Right.Trigger:F2}\n" +
                    $"handR obj: active={_handR.gameObject.activeSelf} model={_handModels} pos={_handR.position} scale={_handR.lossyScale} shader={_handR.GetComponent<MeshRenderer>().sharedMaterial.shader.name} bounds={_handR.GetComponent<MeshRenderer>().bounds.size} layer={_handR.gameObject.layer}\n" +
-                   _launcher.DebugState() + "\n" +
+                   _launcher.DebugState() + "\n" + _decor.DebugState() + "\n" +
                    $"ball: active={_tipBall.gameObject.activeInHierarchy} pos={_tipBall.position} scale={_tipBall.lossyScale}\n" +
                    $"input: pointerValid={_input.PointerValid} overUi={_input.OverUi} reticle={_input.ReticleWorld} origin={_input.AimOriginWorld} locomotion={LocomotionActive} gameCam={(_gameCam ? _gameCam.transform.position.ToString() : "-")}\n" +
                    _hud.DebugState() + "\n" +
