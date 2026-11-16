@@ -11,7 +11,7 @@ namespace CozyMarblesVR
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "tobse.cozymarbles.vr";
-        public const string Version = "0.1.0";
+        public const string Version = "0.1.1";
 
         public static ManualLogSource Log;
         public static VRConfig Cfg;

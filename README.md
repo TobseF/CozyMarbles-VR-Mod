@@ -33,6 +33,12 @@
   <img src="docs/vr-menu.png" alt="The main menu floating in the room" width="49%">
 </p>
 
+<p align="center">
+  <img src="docs/build_menu.gif" alt="The build menu on the left controller" width="32%">
+  <img src="docs/marble_drop.gif" alt="Dropping marbles with the marble tool" width="32%">
+  <img src="docs/use_ring.gif" alt="Using the round buttons on the left controller" width="32%">
+</p>
+
 The marble run sits in front of you as a tabletop model that you can grab, turn and scale. The menus float as
 panels in the room, and you build with a laser pointer or directly with your hands. The mod was made for PC
 streaming to the **Steam Frame**, but it works with any SteamVR / OpenXR headset. It doesn't change any game
